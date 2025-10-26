@@ -1,0 +1,29 @@
+{
+  "tieu_chi": [
+    {
+      "mo_ta": "Tiêu đề: Phông chữ Calibri (Body), cỡ chữ 16, kiểu chữ đậm (B), màu chữ đỏ.",
+      "diem": 0.25,
+      "key": "title_format"
+    },
+    {
+      "mo_ta": "Đoạn 1: Phông chữ Times New Roman, cỡ chữ 14, màu chữ xanh.",
+      "diem": 1.0,
+      "key": "paragraph1_format"
+    },
+    {
+      "mo_ta": "Đoạn 2: Phông chữ Arial, cỡ chữ 15, kiểu chữ nghiêng (I), màu chữ cam.",
+      "diem": 1.0,
+      "key": "paragraph2_format"
+    },
+    {
+      "mo_ta": "Chèn hình ảnh và định dạng hình ảnh vào văn bản đã soạn thảo (có thể lấy ảnh tượng trưng để chèn).",
+      "diem": 0.5,
+      "key": "insert_image"
+    },
+    {
+      "mo_ta": "Lưu bài soạn thảo với họ tên - lớp vào ổ đĩa D.",
+      "diem": 0.25,
+      "key": "save_file"
+    }
+  ]
+}

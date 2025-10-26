@@ -1,0 +1,7 @@
+{
+  "tieu_chi": [
+    {"mo_ta": "Dùng lệnh hiển thị", "diem": 0.5},
+    {"mo_ta": "Dùng lệnh đợi", "diem": 1.0},
+    {"mo_ta": "Lưu bài với họ tên lớp trong ổ đĩa D (ví dụ: Nguyen Van An lop 4A1)", "diem": 0.5}
+  ]
+}

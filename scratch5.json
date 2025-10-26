@@ -1,0 +1,29 @@
+{
+  "tieu_chi": [
+    {
+      "mo_ta": "Có sử dụng biến và tính toán",
+      "diem": 1.0,
+      "key": "has_variable"
+    },
+    {
+      "mo_ta": "Có khối điều kiện/logic",
+      "diem": 1.0,
+      "key": "has_condition"
+    },
+    {
+      "mo_ta": "Có broadcast hoặc nhiều sự kiện",
+      "diem": 1.0,
+      "key": "has_interaction"
+    },
+    {
+      "mo_ta": "Có vòng lặp/điều khiển luồng",
+      "diem": 1.0,
+      "key": "has_loop"
+    },
+    {
+      "mo_ta": "Có nhiều sprite/animation/điều khiển phức hợp",
+      "diem": 1.0,
+      "key": "has_multiple_sprites"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "tieu_chi": [
+    {"mo_ta": "Có đổi màu chữ, đổi cỡ chữ, đổi phông chữ", "diem": 0.5},
+    {"mo_ta": "Chèn tranh ảnh bất kì vào bài đúng vị trí", "diem": 1.0},
+    {"mo_ta": "Lưu bài soạn thảo với họ tên lớp (ví dụ: Nguyen Van An lop 4A1)", "diem": 0.5}
+  ]
+}
