@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>AI-TIN – Trường Tiểu học Trần Quốc Toản</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: white;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-image: url('assets/bg_3.jpg');
+      background-size: cover;
+      background-position: center;
+      transition: background-image 1s ease-in-out;
+      position: relative;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 0;
+    }
+
+    header {
+      position: absolute;
+      top: 20px;
+      left: 30px;
+      display: flex;
+      align-items: center;
+      z-index: 1;
+    }
+
+    header img {
+      height: 80px;
+      margin-right: 15px;
+    }
+
+    header h2 {
+      font-size: 20px;
+      font-weight: 600;
+      text-shadow: 1px 1px 3px #000;
+    }
+
+    .content {
+      z-index: 1;
+      text-align: center;
+      animation: fadeIn 2s ease;
+    }
+
+    .content h1 {
+      font-size: 36px;
+      text-shadow: 2px 2px 5px #000;
+      margin-bottom: 30px;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 15px 40px;
+      background: linear-gradient(45deg, #00b4db, #0083b0);
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      text-decoration: none;
+      cursor: pointer;
+      animation: pulse 2s infinite;
+      transition: transform 0.3s;
+    }
+
+    .btn:hover {
+      transform: scale(1.1);
+    }
+
+    footer {
+      position: absolute;
+      bottom: 15px;
+      right: 25px;
+      font-size: 14px;
+      z-index: 1;
+      text-shadow: 1px 1px 3px #000;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 10px #00b4db; }
+      50% { box-shadow: 0 0 25px #00e5ff; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="assets/logo_tranquoctoan.png" alt="Logo trường">
+    <h2>Trường Tiểu học Trần Quốc Toản – Tỉnh Gia Lai</h2>
+  </header>
+
+  <div class="content">
+    <h1>Trang chấm điểm tự động môn Tin học</h1>
+    <a href="http://localhost:8501" class="btn">🧠 Mở trang chấm điểm AI-TIN</a>
+  </div>
+
+  <footer>© 2025 – Phòng Giáo dục & Đào tạo Gia Lai</footer>
+
+  <script>
+    // Thay đổi hình nền khi chọn khối
+    const backgrounds = ["assets/bg_3.jpg", "assets/bg_4.jpg", "assets/bg_5.jpg"];
+    let current = 0;
+    setInterval(() => {
+      current = (current + 1) % backgrounds.length;
+      document.body.style.backgroundImage = `url('${backgrounds[current]}')`;
+    }, 8000);
+  </script>
+</body>
+</html>
