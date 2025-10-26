@@ -1,0 +1,17 @@
+{
+  "3": {
+    "word": false,
+    "ppt": true,
+    "scratch": false
+  },
+  "4": {
+    "word": true,
+    "ppt": true,
+    "scratch": true
+  },
+  "5": {
+    "word": true,
+    "ppt": false,
+    "scratch": true
+  }
+}
