@@ -1,109 +1,146 @@
-# core.py – Mô-đun trung tâm cho AI-TIN Web
+# core.py
 import os
 import json
+from docx import Document
+from pptx import Presentation
+import zipfile
+
+# =============================
+# 📦 HÀM ĐỌC TIÊU CHÍ
+# =============================
+def load_criteria(subject, grade, folder):
+    """
+    Đọc tiêu chí chấm điểm dựa theo môn và khối.
+    """
+    subject = subject.lower()
+    filename = f"{subject}{grade}.json"
+    filepath = os.path.join(folder, filename)
+    if not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        print(f"Lỗi đọc file tiêu chí {filepath}: {e}")
+        return None
+
+
+# =============================
+# 🧩 HÀM CHẤM WORD
+# =============================
+def grade_word(filepath, criteria):
+    """
+    Chấm bài Word theo tiêu chí trong file JSON.
+    """
+    try:
+        doc = Document(filepath)
+        text = " ".join(p.text for p in doc.paragraphs).lower()
+    except Exception as e:
+        return None, [f"Lỗi khi đọc file Word: {e}"]
+
+    total = 0
+    notes = []
+    for c in criteria.get("tieu_chi", []):
+        mo_ta = c["mo_ta"]
+        diem = c["diem"]
+        # Kiểm tra đơn giản: nếu từ khóa trong tiêu chí xuất hiện trong văn bản
+        if any(k.lower() in text for k in mo_ta.split()):
+            total += diem
+            notes.append(f"✅ {mo_ta} (+{diem}đ)")
+        else:
+            notes.append(f"⚠️ {mo_ta} (chưa đạt)")
+    total = min(round(total, 1), 10)
+    return total, notes
+
+
+# =============================
+# 🎞️ HÀM CHẤM POWERPOINT
+# =============================
+def grade_ppt(filepath, criteria):
+    """
+    Chấm bài PowerPoint theo tiêu chí trong file JSON.
+    """
+    try:
+        prs = Presentation(filepath)
+        num_slides = len(prs.slides)
+    except Exception as e:
+        return None, [f"Lỗi khi đọc file PowerPoint: {e}"]
+
+    total = 0
+    notes = []
+    text_content = ""
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                text_content += shape.text.lower() + " "
+
+    for c in criteria.get("tieu_chi", []):
+        mo_ta = c["mo_ta"]
+        diem = c["diem"]
+        # Ví dụ: kiểm tra theo từ khóa trong tiêu chí
+        if any(k.lower() in text_content for k in mo_ta.split()) or "trang trình chiếu" in mo_ta.lower() and num_slides >= 3:
+            total += diem
+            notes.append(f"✅ {mo_ta} (+{diem}đ)")
+        else:
+            notes.append(f"⚠️ {mo_ta} (chưa đạt)")
+    total = min(round(total, 1), 10)
+    return total, notes
+
+
+# =============================
+# 🐱‍💻 HÀM CHẤM SCRATCH
+# =============================
+def grade_scratch(filepath, criteria):
+    """
+    Chấm file Scratch (.sb3) dựa vào nội dung JSON bên trong.
+    """
+    try:
+        with zipfile.ZipFile(filepath, 'r') as z:
+            if 'project.json' not in z.namelist():
+                return None, ["File .sb3 không hợp lệ (thiếu project.json)."]
+            with z.open('project.json') as f:
+                project_data = json.load(f)
+    except Exception as e:
+        return None, [f"Lỗi khi đọc file Scratch: {e}"]
+
+    # Nội dung chính để kiểm tra
+    scripts_text = json.dumps(project_data).lower()
+    total = 0
+    notes = []
+
+    for c in criteria.get("tieu_chi", []):
+        mo_ta = c["mo_ta"]
+        diem = c["diem"]
+        if any(k.lower() in scripts_text for k in mo_ta.split()):
+            total += diem
+            notes.append(f"✅ {mo_ta} (+{diem}đ)")
+        else:
+            notes.append(f"⚠️ {mo_ta} (chưa đạt)")
+    total = min(round(total, 1), 10)
+    return total, notes
+
+
+# =============================
+# 🧾 HÀM ĐẢM BẢO FILE EXCEL TỒN TẠI
+# =============================
 from openpyxl import Workbook
 
-
-# ==================================================
-# 🧩 1️⃣ HÀM TẢI TIÊU CHÍ CHẤM
-# ==================================================
-def load_criteria(critfile, grade, folder="criteria"):
-    """
-    Tải tiêu chí chấm cho một phần mềm (Word/PPT/Scratch) và khối lớp.
-    Ưu tiên đọc file JSON từ thư mục criteria. 
-    Nếu không có file, trả về bộ tiêu chí mẫu để demo.
-    """
-    path = os.path.join(folder, f"{critfile}{grade}.json")
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print("Lỗi khi đọc tiêu chí:", e)
-            return None
-
-    # Trường hợp chưa có file JSON thì trả về tiêu chí mẫu
-    return {
-        "tieu_chi": [
-            {"mo_ta": "Hoàn thành đúng yêu cầu bài", "diem": 5},
-            {"mo_ta": "Trình bày đẹp, rõ ràng", "diem": 3},
-            {"mo_ta": "Có yếu tố sáng tạo", "diem": 2},
-        ]
-    }
-
-
-# ==================================================
-# 🧩 2️⃣ HÀM CHẤM BÀI WORD
-# ==================================================
-def grade_word(file_path, criteria):
-    """
-    Giả lập chấm bài Word. Trả về điểm và nhận xét.
-    Trong phiên bản thực tế, có thể dùng python-docx để kiểm tra nội dung.
-    """
-    try:
-        total = sum(item["diem"] for item in criteria["tieu_chi"])
-        notes = [f"{item['mo_ta']} (+{item['diem']}đ)" for item in criteria["tieu_chi"]]
-        return min(total, 10), notes
-    except Exception as e:
-        return None, [f"Lỗi khi chấm Word: {e}"]
-
-
-# ==================================================
-# 🧩 3️⃣ HÀM CHẤM BÀI POWERPOINT
-# ==================================================
-def grade_ppt(file_path, criteria):
-    """
-    Giả lập chấm bài PowerPoint.
-    Có thể dùng python-pptx để đọc nội dung slide trong tương lai.
-    """
-    try:
-        total = sum(item["diem"] for item in criteria["tieu_chi"]) - 1  # ví dụ điểm thấp hơn 1
-        notes = [f"{item['mo_ta']} (+{item['diem']}đ)" for item in criteria["tieu_chi"]]
-        return min(total, 10), notes
-    except Exception as e:
-        return None, [f"Lỗi khi chấm PowerPoint: {e}"]
-
-
-# ==================================================
-# 🧩 4️⃣ HÀM CHẤM BÀI SCRATCH
-# ==================================================
-def grade_scratch(file_path, criteria):
-    """
-    Giả lập chấm bài Scratch (.sb3)
-    Có thể dùng json để đọc project.sb3 trong tương lai.
-    """
-    try:
-        total = sum(item["diem"] for item in criteria["tieu_chi"]) - 2  # ví dụ điểm thấp hơn 2
-        notes = [f"{item['mo_ta']} (+{item['diem']}đ)" for item in criteria["tieu_chi"]]
-        return max(min(total, 10), 0), notes
-    except Exception as e:
-        return None, [f"Lỗi khi chấm Scratch: {e}"]
-
-
-# ==================================================
-# 🧩 5️⃣ HÀM XỬ LÝ TÊN HỌC SINH
-# ==================================================
-def pretty_name_from_filename(filename):
-    """
-    Chuyển tên file thành tên dễ đọc để hiển thị.
-    Ví dụ: 'le_thi_bich_3a1.docx' -> 'Le Thi Bich 3A1'
-    """
-    name = os.path.splitext(os.path.basename(filename))[0]
-    name = name.replace("_", " ").replace("-", " ").title()
-    return name
-
-
-# ==================================================
-# 🧩 6️⃣ HÀM TẠO FILE EXCEL NẾU CHƯA CÓ
-# ==================================================
-def ensure_workbook_exists(path="ketqua_tonghop.xlsx"):
-    """
-    Kiểm tra nếu file Excel tổng hợp chưa tồn tại thì tạo mới.
-    """
+def ensure_workbook_exists(path):
     if not os.path.exists(path):
         wb = Workbook()
-        ws = wb.active
-        ws.title = "TỔNG HỢP"
-        ws.append(["Họ tên học sinh", "Môn", "Điểm", "Nhận xét"])
         wb.save(path)
-    return path
+
+
+# =============================
+# 🪶 HÀM XỬ LÝ TÊN FILE HỌC SINH
+# =============================
+def pretty_name_from_filename(filename):
+    """
+    Trích tên học sinh từ tên file. 
+    Ví dụ: 'tranminhduc_5a1.docx' → 'Trần Minh Đức'
+    """
+    name = os.path.splitext(filename)[0]
+    name = name.replace("_", " ").replace("-", " ")
+    parts = name.split()
+    return " ".join(p.capitalize() for p in parts if not p.lower().startswith("lop"))
