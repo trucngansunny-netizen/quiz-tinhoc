@@ -1,13 +1,15 @@
-from flask import Flask, render_template, request, url_for
+from flask import Flask, render_template, request
 import json
 import os
 
-app = Flask(__name__)
+# --- Khởi tạo ứng dụng Flask ---
+app = Flask(__name__, static_folder="static", template_folder="templates")
 
 # --- Đường dẫn thư mục tiêu chí ---
 CRITERIA_DIR = os.path.join(os.path.dirname(__file__), "criteria")
 
-# --- Xác định nền theo khối ---
+
+# --- Hàm xác định hình nền theo khối ---
 def get_background_for_grade(grade):
     return {
         "3": "bg_3.jpg",
@@ -16,21 +18,20 @@ def get_background_for_grade(grade):
     }.get(grade, "bg_default.jpg")
 
 
-# --- Tải file tiêu chí ---
+# --- Hàm tải file tiêu chí ---
 def load_criteria(software, grade):
-    filename = None
-
-    # Map file theo khối và phần mềm
+    # Trường hợp không học phần mềm
     if software == "word" and grade == "3":
         return {"tieu_chi": [{"mo_ta": "Khối 3 không học phần mềm Word", "diem": ""}]}
     elif software == "powerpoint" and grade == "5":
         return {"tieu_chi": [{"mo_ta": "Khối 5 không học phần mềm PowerPoint", "diem": ""}]}
     elif software == "scratch" and grade == "3":
         return {"tieu_chi": [{"mo_ta": "Khối 3 không học phần mềm Scratch", "diem": ""}]}
-    else:
-        filename = f"{software}{grade}.json"
 
+    # Các trường hợp khác thì đọc file JSON
+    filename = f"{software}{grade}.json"
     file_path = os.path.join(CRITERIA_DIR, filename)
+
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -38,6 +39,7 @@ def load_criteria(software, grade):
         return None
 
 
+# --- Trang chủ ---
 @app.route("/", methods=["GET", "POST"])
 def home():
     selected_class = None
@@ -49,8 +51,9 @@ def home():
     if request.method == "POST":
         selected_class = request.form.get("lop", "")
         selected_software = request.form.get("software", "")
+
         if selected_class:
-            grade = selected_class[0]  # Lấy số khối từ lớp
+            grade = selected_class[0]  # lấy số đầu trong "5A" -> "5"
             background = get_background_for_grade(grade)
 
             if selected_software:
@@ -72,7 +75,8 @@ def home():
     )
 
 
+# --- Chạy app ---
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
-
-
+    # Render hoặc môi trường deploy sẽ cung cấp biến PORT
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
