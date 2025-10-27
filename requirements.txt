@@ -1,5 +1,6 @@
 # --- Core web ---
-streamlit==1.39.0
+flask==3.0.3
+gunicorn==23.0.0
 
 # --- Office file handling ---
 python-docx==1.1.2
@@ -11,4 +12,3 @@ pandas==2.2.3
 
 # --- Utility ---
 requests==2.32.3
-flask==3.0.3
