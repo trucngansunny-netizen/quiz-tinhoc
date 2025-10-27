@@ -2,33 +2,27 @@
   "tieu_chi": [
     {
       "mo_ta": "Trang 1: Giới thiệu chủ đề - Tên người soạn – Lớp.",
-      "diem": 0.25,
-      "key": "page1_intro"
+      "diem": 0.25
     },
     {
       "mo_ta": "Trang 2: Một số hình ảnh về phong cảnh quê hương (chèn hình bất kì có sẵn trong máy tính).",
-      "diem": 0.5,
-      "key": "page2_images"
+      "diem": 0.5
     },
     {
       "mo_ta": "Trang 3: Lời cảm ơn, và mời các bạn đến thăm quê hương mình – tạm biệt.",
-      "diem": 0.25,
-      "key": "page3_thanks"
+      "diem": 0.25
     },
     {
-      "mo_ta": "Chọn phông chữ Times New Roman, chọn cỡ chữ và màu chữ cho phù hợp nội dung trang Word.",
-      "diem": 0.5,
-      "key": "font_style"
+      "mo_ta": "Chọn phông chữ Times New Roman, chọn cỡ chữ và màu chữ cho phù hợp nội dung trang trình chiếu.",
+      "diem": 0.5
     },
     {
       "mo_ta": "Chèn hiệu ứng hoặc định dạng đoạn văn bản hợp lý (in đậm, nghiêng, gạch chân...).",
-      "diem": 0.25,
-      "key": "text_format"
+      "diem": 0.25
     },
     {
-      "mo_ta": "Lưu tên tệp: Baithi1_HỌ VÀ TÊN_CỦA_MÌNH_LỚP.docx vào thư mục của em. Ví dụ: Baithi1-nguyenthilan-lop4A1.docx.",
-      "diem": 0.25,
-      "key": "save_filename"
+      "mo_ta": "Lưu tên tệp: Baithi1_HỌ VÀ TÊN_CỦA_MÌNH_LỚP.pptx vào thư mục của em. Ví dụ: Baithi1-nguyenthilan-lop4A1.pptx.",
+      "diem": 0.25
     }
   ]
 }
