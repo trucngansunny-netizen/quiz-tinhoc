@@ -3,61 +3,139 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bài kiểm tra Tin học</title>
+  <title>Chấm điểm Tin học Trường Trần Quốc Toản</title>
   <style>
     body {
       font-family: "Segoe UI", sans-serif;
       margin: 0;
-      background: linear-gradient(120deg, #74ebd5, #ACB6E5);
+      background: url("{{ url_for('static', filename=background) }}") no-repeat center center fixed;
+      background-size: cover;
       height: 100vh;
+      color: #333;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
-      animation: fadeIn 2s ease;
+      justify-content: flex-start;
+      backdrop-filter: blur(6px) brightness(0.9);
+      animation: fadeIn 1.5s ease;
     }
     @keyframes fadeIn {
-      from {opacity: 0;}
-      to {opacity: 1;}
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
-    .container {
-      background: rgba(255, 255, 255, 0.9);
-      padding: 40px;
-      border-radius: 20px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    .header {
       text-align: center;
+      margin-top: 20px;
     }
-    h1 {
-      color: #333;
-      margin-bottom: 20px;
+    .header img {
+      height: 100px;
+    }
+    .title {
+      font-size: 28px;
+      font-weight: bold;
+      margin-top: 10px;
+      color: #222;
+      text-shadow: 1px 1px 3px rgba(255,255,255,0.8);
+    }
+    .box {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 20px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      padding: 30px;
+      width: 90%;
+      max-width: 600px;
+      margin-top: 20px;
+      animation: fadeIn 1.2s ease;
+    }
+    label {
+      font-size: 18px;
+      display: block;
+      margin: 10px 0 5px;
+    }
+    select, button {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      margin-bottom: 15px;
     }
     button {
-      background-color: #4CAF50;
-      border: none;
+      background: linear-gradient(135deg, #4CAF50, #2E8B57);
       color: white;
-      padding: 15px 25px;
-      text-align: center;
-      font-size: 16px;
-      border-radius: 10px;
+      font-weight: bold;
       cursor: pointer;
-      transition: background 0.3s ease, transform 0.2s;
-      animation: pulse 1.5s infinite;
-    }
-    @keyframes pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-      100% { transform: scale(1); }
+      border: none;
+      transition: 0.3s;
     }
     button:hover {
-      background-color: #45a049;
+      transform: scale(1.05);
+      background: linear-gradient(135deg, #3e8e41, #26734d);
+    }
+    h2 {
+      color: #006400;
+      text-align: center;
+      margin-top: 20px;
+    }
+    ul {
+      text-align: left;
+      list-style-type: "⭐ ";
+      padding-left: 20px;
+      line-height: 1.6;
+    }
+    .message {
+      text-align: center;
+      font-style: italic;
+      color: #c00;
+      background: rgba(255,255,255,0.7);
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Chào mừng bạn đến với bài kiểm tra Tin học</h1>
-    <form action="/quiz" method="get">
-      <button type="submit">Bắt đầu làm bài</button>
+  <div class="header">
+    <img src="{{ url_for('static', filename='logo_tranquoctoan.png') }}" alt="Logo Trường Trần Quốc Toản">
+    <div class="title">HỆ THỐNG CHẤM ĐIỂM TIN HỌC</div>
+  </div>
+
+  <div class="box">
+    <form method="post" action="/">
+      <label for="lop">🎓 Chọn lớp học</label>
+      <select name="lop" id="lop" required>
+        <option value="">-- Chọn lớp --</option>
+        <option value="3A1" {% if selected_class=="3A1" %}selected{% endif %}>3A1</option>
+        <option value="4A1" {% if selected_class=="4A1" %}selected{% endif %}>4A1</option>
+        <option value="4A2" {% if selected_class=="4A2" %}selected{% endif %}>4A2</option>
+        <option value="5A1" {% if selected_class=="5A1" %}selected{% endif %}>5A1</option>
+      </select>
+
+      <label for="software">🧩 Xem tiêu chí cho</label>
+      <select name="software" id="software" required>
+        <option value="">-- Chọn phần mềm --</option>
+        <option value="word" {% if selected_software=="word" %}selected{% endif %}>Word</option>
+        <option value="powerpoint" {% if selected_software=="powerpoint" %}selected{% endif %}>PowerPoint</option>
+        <option value="scratch" {% if selected_software=="scratch" %}selected{% endif %}>Scratch</option>
+      </select>
+
+      <button type="submit">📚 Xem tiêu chí</button>
     </form>
+
+    {% if selected_class %}
+      <h2>📘 Tiêu chí chấm cho khối {{ selected_class[0] }}</h2>
+      {% if message %}
+        <div class="message">{{ message }}</div>
+      {% endif %}
+    {% endif %}
+
+    {% if criteria %}
+      <ul>
+        {% for item in criteria.tieu_chi %}
+          <li>{{ item.mo_ta }} — <strong>{{ item.diem }}</strong> điểm</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
   </div>
 </body>
 </html>
