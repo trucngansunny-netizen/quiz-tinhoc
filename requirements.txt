@@ -11,3 +11,4 @@ pandas==2.2.3
 
 # --- Utility ---
 requests==2.32.3
+flask==3.0.3
