@@ -20,7 +20,13 @@ def get_background_for_grade(grade):
 
 # --- Hàm tải file tiêu chí ---
 def load_criteria(software, grade):
-    # Trường hợp không học phần mềm
+    mapping = {
+        "word": "word",
+        "powerpoint": "ppt",
+        "scratch": "scratch"
+    }
+
+    # Các khối không học phần mềm nào đó
     if software == "word" and grade == "3":
         return {"tieu_chi": [{"mo_ta": "Khối 3 không học phần mềm Word", "diem": ""}]}
     elif software == "powerpoint" and grade == "5":
@@ -28,8 +34,8 @@ def load_criteria(software, grade):
     elif software == "scratch" and grade == "3":
         return {"tieu_chi": [{"mo_ta": "Khối 3 không học phần mềm Scratch", "diem": ""}]}
 
-    # Các trường hợp khác thì đọc file JSON
-    filename = f"{software}{grade}.json"
+    # Lấy file JSON đúng theo tên
+    filename = f"{mapping.get(software, software)}{grade}.json"
     file_path = os.path.join(CRITERIA_DIR, filename)
 
     if os.path.exists(file_path):
@@ -53,7 +59,7 @@ def home():
         selected_software = request.form.get("software", "")
 
         if selected_class:
-            grade = selected_class[0]  # lấy số đầu trong "5A" -> "5"
+            grade = selected_class[0]
             background = get_background_for_grade(grade)
 
             if selected_software:
@@ -77,6 +83,5 @@ def home():
 
 # --- Chạy app ---
 if __name__ == "__main__":
-    # Render hoặc môi trường deploy sẽ cung cấp biến PORT
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
