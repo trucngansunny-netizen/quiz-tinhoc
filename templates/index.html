@@ -7,36 +7,44 @@
 <style>
   body {
     font-family: "Segoe UI", sans-serif;
-    background: #f2f6fb;
     color: #1e293b;
     margin: 0;
     padding: 0;
     display: flex;
     justify-content: center;
     min-height: 100vh;
+    transition: background 0.6s ease;
+    background: url("static/bg_default.jpg") no-repeat center center / cover;
+  }
+  .overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.6);
+    z-index: 0;
   }
   .container {
+    position: relative;
+    z-index: 1;
     text-align: center;
-    background: #fff;
+    background: rgba(255, 255, 255, 0.9);
     padding: 30px 24px;
     border-radius: 16px;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.15);
     width: 90%;
-    max-width: 400px;
-    margin-top: 40px;
+    max-width: 420px;
+    margin-top: 50px;
   }
   h1 {
     font-size: 20px;
-    color: #0b76ef;
     margin-bottom: 20px;
   }
-  .section {
-    margin: 16px 0;
-  }
-  .label {
-    font-weight: bold;
-    margin-bottom: 8px;
-  }
+  h1.khoi3 { color: #00796b; }
+  h1.khoi4 { color: #e69500; }
+  h1.khoi5 { color: #7e57c2; }
+
+  .section { margin: 16px 0; }
+  .label { font-weight: bold; margin-bottom: 8px; }
+
   .btn {
     display: inline-block;
     width: 100%;
@@ -48,60 +56,119 @@
     border-radius: 10px;
     font-size: 16px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, transform 0.2s;
   }
-  .btn:hover {
-    background: #095ecc;
-  }
+  .btn:hover { background: #095ecc; transform: translateY(-1px); }
+
   .btn-outline {
     background: transparent;
     color: #0b76ef;
     border: 2px solid #0b76ef;
   }
-  .btn-outline:hover {
-    background: #e0efff;
+  .btn-outline:hover { background: #e0efff; }
+
+  .hidden { display: none; }
+  input[type="file"] {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 10px;
+    width: 100%;
+    cursor: pointer;
+  }
+  .result-box {
+    background: #f1f5f9;
+    border-radius: 10px;
+    padding: 10px;
+    margin-top: 12px;
   }
 </style>
 </head>
 <body>
 
+<div class="overlay"></div>
+
 <div class="container">
-  <h1>💻 HỆ THỐNG CHẤM ĐIỂM TIN HỌC</h1>
 
-  <div class="section">
-    <div class="label">🎓 Chọn lớp học</div>
-    <button class="btn-outline" onclick="chonLop()">3A1</button>
+  <!-- Trang chọn khối -->
+  <div id="chonKhoi">
+    <h1>💻 HỆ THỐNG CHẤM ĐIỂM TIN HỌC</h1>
+    <div class="section">
+      <div class="label">🎓 Chọn khối lớp để bắt đầu</div>
+      <button class="btn-outline" onclick="vaoKhoi(3)">Khối 3</button>
+      <button class="btn-outline" onclick="vaoKhoi(4)">Khối 4</button>
+      <button class="btn-outline" onclick="vaoKhoi(5)">Khối 5</button>
+    </div>
   </div>
 
-  <div class="section">
-    <div class="label">🧩 Xem tiêu chí cho</div>
-    <button class="btn-outline" onclick="xemTieuChi()">PowerPoint 📚 Xem tiêu chí</button>
+  <!-- Trang chấm điểm -->
+  <div id="chamDiem" class="hidden">
+    <h1 id="tieuDeKhoi">📝 Chấm điểm Tin học</h1>
+
+    <div class="section">
+      <div class="label">🧩 Chọn phần mềm cần chấm</div>
+      <select id="chonPhanMem" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;">
+        <option>PowerPoint</option>
+        <option>Word</option>
+        <option>Scratch</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <div class="label">📂 Gửi tệp bài làm để chấm</div>
+      <input type="file" id="fileInput" accept=".pptx,.docx,.sb3,.zip">
+      <button class="btn" onclick="chamFile()">Bắt đầu chấm</button>
+    </div>
+
+    <div id="ketQua" class="result-box hidden"></div>
+
+    <div class="section">
+      <button class="btn-outline" onclick="quayVe()">🏠 Quay về chọn khối khác</button>
+    </div>
   </div>
 
-  <div class="section">
-    <button class="btn" onclick="chamDiem()">📝 Chấm điểm</button>
-  </div>
-
-  <div class="section">
-    <button class="btn-outline" onclick="quayVe()">🏠 Quay về trang chủ</button>
-  </div>
 </div>
 
 <script>
-  function chonLop() {
-    alert("Hiện tại đang ở lớp 3A1. (Sau này có thể cho chọn lớp khác)");
-  }
+  function vaoKhoi(khoi) {
+    // Đổi hình nền theo khối
+    document.body.style.background = `url('static/bg_${khoi}.jpg') no-repeat center center / cover`;
 
-  function xemTieuChi() {
-    window.location.href = "tieuchi.html"; // thay bằng trang thật của bạn
-  }
+    // Hiện trang chấm điểm, ẩn chọn khối
+    document.getElementById('chonKhoi').classList.add('hidden');
+    document.getElementById('chamDiem').classList.remove('hidden');
 
-  function chamDiem() {
-    window.location.href = "chamdiem.html"; // trang nhập điểm hoặc chấm tự động
+    // Đổi tiêu đề
+    const tieuDe = document.getElementById('tieuDeKhoi');
+    tieuDe.innerText = "📝 Chấm điểm Tin học khối " + khoi;
+    tieuDe.className = "khoi" + khoi;
+
+    // Ẩn kết quả cũ (nếu có)
+    document.getElementById('ketQua').classList.add('hidden');
   }
 
   function quayVe() {
-    window.location.href = "index.html"; // trang chọn khối hoặc trang chủ
+    document.body.style.background = "url('static/bg_default.jpg') no-repeat center center / cover";
+    document.getElementById('chonKhoi').classList.remove('hidden');
+    document.getElementById('chamDiem').classList.add('hidden');
+  }
+
+  function chamFile() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    const ketQuaBox = document.getElementById('ketQua');
+    if (!file) {
+      alert('Vui lòng chọn tệp để chấm.');
+      return;
+    }
+
+    // Giả lập quá trình chấm
+    ketQuaBox.classList.remove('hidden');
+    ketQuaBox.innerHTML = `
+      <strong>Kết quả chấm:</strong><br>
+      Tệp: ${file.name}<br>
+      Điểm: <b>${Math.floor(Math.random() * 4) + 7}/10</b><br>
+      Nhận xét: Bài làm tốt, trình bày rõ ràng.
+    `;
   }
 </script>
 
