@@ -1,213 +1,109 @@
 <!DOCTYPE html>
-
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chấm điểm Tin học Trường Trần Quốc Toản</title>
-  <style>
-    body {
-      font-family: "Segoe UI", sans-serif;
-      margin: 0;
-      background: url("{{ url_for('static', filename=background) }}") no-repeat center center fixed;
-      background-size: cover;
-      height: 100vh;
-      color: #222;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      backdrop-filter: blur(5px) brightness(0.9);
-      animation: fadeIn 1.5s ease;
-    }
-
-```
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.header {
-  text-align: center;
-  margin-top: 25px;
-}
-
-.header img {
-  height: 110px;
-}
-
-.title {
-  font-size: 30px;
-  font-weight: bold;
-  margin-top: 10px;
-  color: #1e4f91;
-  text-shadow: 1px 1px 4px rgba(255,255,255,0.9);
-}
-
-.box {
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: 25px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
-  padding: 40px;
-  width: 90%;
-  max-width: 850px;
-  margin-top: 30px;
-  animation: fadeIn 1.2s ease;
-}
-
-label {
-  font-size: 20px;
-  display: block;
-  margin: 10px 0 8px;
-  text-align: left;
-}
-
-select, button {
-  width: 100%;
-  padding: 12px 15px;
-  border-radius: 12px;
-  border: 1px solid #bbb;
-  font-size: 18px;
-  margin-bottom: 18px;
-}
-
-button {
-  background: linear-gradient(135deg, #4CAF50, #2E8B57);
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
-  border: none;
-  transition: 0.3s;
-}
-
-button:hover {
-  transform: scale(1.05);
-  background: linear-gradient(135deg, #3e8e41, #26734d);
-}
-
-h2 {
-  color: #004b2b;
-  text-align: center;
-  font-size: 24px;
-  margin-top: 25px;
-}
-
-.message {
-  text-align: center;
-  font-style: italic;
-  color: #c00;
-  background: rgba(255,255,255,0.8);
-  padding: 10px;
-  border-radius: 10px;
-  margin-top: 15px;
-  font-size: 18px;
-}
-
-/* Bảng tiêu chí */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 25px;
-  font-size: 19px;
-  background: white;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 0 10px rgba(0,0,0,0.1);
-}
-
-th, td {
-  padding: 14px 18px;
-  border-bottom: 1px solid #ddd;
-}
-
-th {
-  background-color: #1e4f91;
-  color: white;
-  text-transform: uppercase;
-  font-size: 18px;
-}
-
-tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-tr:hover {
-  background-color: #eef5ff;
-}
-
-.footer {
-  text-align: center;
-  margin-top: 30px;
-  color: #555;
-  font-size: 15px;
-  opacity: 0.8;
-}
-```
-
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HỆ THỐNG CHẤM ĐIỂM TIN HỌC</title>
+<style>
+  body {
+    font-family: "Segoe UI", sans-serif;
+    background: #f2f6fb;
+    color: #1e293b;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .container {
+    text-align: center;
+    background: #fff;
+    padding: 30px 24px;
+    border-radius: 16px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    width: 90%;
+    max-width: 400px;
+    margin-top: 40px;
+  }
+  h1 {
+    font-size: 20px;
+    color: #0b76ef;
+    margin-bottom: 20px;
+  }
+  .section {
+    margin: 16px 0;
+  }
+  .label {
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+  .btn {
+    display: inline-block;
+    width: 100%;
+    padding: 12px;
+    margin: 6px 0;
+    background: #0b76ef;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .btn:hover {
+    background: #095ecc;
+  }
+  .btn-outline {
+    background: transparent;
+    color: #0b76ef;
+    border: 2px solid #0b76ef;
+  }
+  .btn-outline:hover {
+    background: #e0efff;
+  }
+</style>
 </head>
 <body>
-  <div class="header">
-    <img src="{{ url_for('static', filename='logo_tranquoctoan.png') }}" alt="Logo Trường Trần Quốc Toản">
-    <div class="title">HỆ THỐNG CHẤM ĐIỂM TIN HỌC</div>
+
+<div class="container">
+  <h1>💻 HỆ THỐNG CHẤM ĐIỂM TIN HỌC</h1>
+
+  <div class="section">
+    <div class="label">🎓 Chọn lớp học</div>
+    <button class="btn-outline" onclick="chonLop()">3A1</button>
   </div>
 
-  <div class="box">
-    <form method="post" action="/">
-      <label for="lop">🎓 Chọn lớp học</label>
-      <select name="lop" id="lop" required>
-        <option value="">-- Chọn lớp --</option>
-        <option value="3A1" {% if selected_class=="3A1" %}selected{% endif %}>3A1</option>
-        <option value="4A1" {% if selected_class=="4A1" %}selected{% endif %}>4A1</option>
-        <option value="4A2" {% if selected_class=="4A2" %}selected{% endif %}>4A2</option>
-        <option value="5A1" {% if selected_class=="5A1" %}selected{% endif %}>5A1</option>
-      </select>
-
-```
-  <label for="software">🧩 Xem tiêu chí cho</label>
-  <select name="software" id="software" required>
-    <option value="">-- Chọn phần mềm --</option>
-    <option value="word" {% if selected_software=="word" %}selected{% endif %}>Word</option>
-    <option value="powerpoint" {% if selected_software=="powerpoint" %}selected{% endif %}>PowerPoint</option>
-    <option value="scratch" {% if selected_software=="scratch" %}selected{% endif %}>Scratch</option>
-  </select>
-
-  <button type="submit">📚 Xem tiêu chí</button>
-</form>
-
-{% if selected_class %}
-  <h2>📘 Tiêu chí chấm cho khối {{ selected_class[0] }}</h2>
-  {% if message %}
-    <div class="message">{{ message }}</div>
-  {% endif %}
-{% endif %}
-
-{% if criteria %}
-  <table>
-    <thead>
-      <tr>
-        <th>STT</th>
-        <th>Mô tả tiêu chí</th>
-        <th>Điểm</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in criteria.tieu_chi %}
-      <tr>
-        <td>{{ loop.index }}</td>
-        <td>{{ item.mo_ta }}</td>
-        <td style="text-align:center;"><strong>{{ item.diem }}</strong></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-{% endif %}
-```
-
+  <div class="section">
+    <div class="label">🧩 Xem tiêu chí cho</div>
+    <button class="btn-outline" onclick="xemTieuChi()">PowerPoint 📚 Xem tiêu chí</button>
   </div>
 
-  <div class="footer">
-    © Trường Tiểu học Trần Quốc Toản - Phường An Bình - Tỉnh Gia Lai
+  <div class="section">
+    <button class="btn" onclick="chamDiem()">📝 Chấm điểm</button>
   </div>
+
+  <div class="section">
+    <button class="btn-outline" onclick="quayVe()">🏠 Quay về trang chủ</button>
+  </div>
+</div>
+
+<script>
+  function chonLop() {
+    alert("Hiện tại đang ở lớp 3A1. (Sau này có thể cho chọn lớp khác)");
+  }
+
+  function xemTieuChi() {
+    window.location.href = "tieuchi.html"; // thay bằng trang thật của bạn
+  }
+
+  function chamDiem() {
+    window.location.href = "chamdiem.html"; // trang nhập điểm hoặc chấm tự động
+  }
+
+  function quayVe() {
+    window.location.href = "index.html"; // trang chọn khối hoặc trang chủ
+  }
+</script>
+
 </body>
 </html>
