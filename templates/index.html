@@ -1,196 +1,145 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>HỆ THỐNG CHẤM ĐIỂM TIN HỌC</title>
-<style>
-  :root { --card-bg: rgba(255,255,255,0.0); --panel-pad: 14px; --accent: #0b76ef; }
-  body {
-    font-family: "Segoe UI", sans-serif;
-    color: #0b2435;
-    margin: 0;
-    padding: 0;
-    min-height: 100vh;
-    background: url("/static/{{ background }}") no-repeat center center / cover;
-    transition: background 0.4s ease;
-  }
-  .container {
-    width: 94%;
-    max-width: 980px;
-    margin: 24px auto;
-    padding: 18px;
-    color: #082034;
-    /* no white box — content lays on background */
-  }
-  header {
-    text-align: center;
-    padding: 12px 0 6px;
-  }
-  h1 {
-    margin: 0;
-    font-size: 1.6rem;
-    font-weight: 700;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-  }
-  p.subtitle { margin: 6px 0 18px; color: rgba(0,0,0,0.6); }
-
-  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
-  .col { flex:1 1 280px; min-width:240px; }
-
-  label { font-weight:600; display:block; margin-bottom:8px; }
-  select, input[type="file"], input[type="text"] {
-    width:100%;
-    padding:10px;
-    border-radius:10px;
-    border:1px solid rgba(0,0,0,0.15);
-    background: rgba(255,255,255,0.85);
-  }
-
-  button.btn {
-    display:inline-block;
-    padding:12px 16px;
-    border-radius:10px;
-    border:none;
-    background: var(--accent);
-    color:white;
-    font-weight:700;
-    cursor:pointer;
-    box-shadow: 0 6px 14px rgba(11,118,239,0.18);
-  }
-  button.btn:active { transform: translateY(1px); }
-
-  .panel {
-    padding: var(--panel-pad);
-    border-radius:12px;
-    background: rgba(255,255,255,0.6);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  }
-
-  .criteria-list { margin:8px 0 0 0; padding:0; list-style:none; }
-  .criteria-list li { padding:6px 8px; border-radius:8px; margin-bottom:6px; background: rgba(255,255,255,0.85); }
-  .result-box { margin-top:12px; padding:12px; border-radius:10px; background: rgba(255,255,255,0.85); }
-
-  .footer {
-    margin-top:18px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    color: rgba(0,0,0,0.7);
-    font-size:0.95rem;
-  }
-
-  .note { font-size:0.9rem; color:rgba(0,0,0,0.6); }
-
-  @media (max-width:720px){
-    .row { flex-direction:column; }
-  }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-TIN — Chấm bài Tin học</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      margin: 0; padding: 0;
+      background: url("/static/bg_default.jpg") no-repeat center center / cover;
+      color: #1b2935;
+    }
+    .overlay { background: rgba(255,255,255,0.88); max-width: 980px; margin: 30px auto; border-radius: 12px; padding: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+    h1 { margin: 6px 0 12px 0; color:#0b66c3; font-size:24px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    label { font-weight:600; display:block; margin-bottom:6px; }
+    select, input[type=file], button { padding:10px; border-radius:8px; border:1px solid #cbd5e1; background:white; }
+    .btn { background:#0b76ef; color:white; border:none; cursor:pointer; }
+    .muted { color:#475569; font-size:14px; }
+    .result { background:#f8fafc; border-left:4px solid #0b76ef; padding:12px; margin-top:12px; border-radius:8px; }
+    .success { color: #0b8537; font-weight:700; }
+    .error { color: #c53030; font-weight:700; }
+    .footer { text-align:right; margin-top:12px; color:#64748b; font-size:13px; }
+    .visitbox { position: fixed; right: 12px; bottom: 12px; background: rgba(255,255,255,0.9); padding:8px 10px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.08); font-size:13px; color:#334155; }
+    .logo { height:54px; float:left; margin-right:12px; }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>💻 HỆ THỐNG CHẤM ĐIỂM TIN HỌC</h1>
-      <p class="subtitle">Chọn khối → chọn phần mềm → tải tệp bài làm → chấm tự động theo tiêu chí</p>
-    </header>
+  <div class="overlay">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <img src="/static/logo_tranquoctoan.png" alt="logo" class="logo" onerror="this.style.display='none'">
+      <div>
+        <h1>🧠 AI-TIN — Hệ thống chấm bài Tin học</h1>
+        <div class="muted">Chọn Khối → Chọn Lớp → Chọn Môn → Nộp tệp để chấm</div>
+      </div>
+    </div>
 
-    <form method="POST" enctype="multipart/form-data">
-      <div class="row">
-        <div class="col panel">
-          <label for="lop">🎓 Chọn lớp</label>
-          <select id="lop" name="lop" required>
-            <option value="">-- chọn lớp --</option>
-            {% for c in classes %}
-              <option value="{{ c }}" {% if c==selected_class %}selected{% endif %}>{{ c }}</option>
-            {% endfor %}
+    <hr style="margin:12px 0; border:none; border-top:1px solid #e6eef8;">
+
+    {% if message %}
+      <div class="result error">{{ message }}</div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <div style="min-width:160px;">
+          <label>Chọn khối</label>
+          <select name="grade" id="grade" onchange="onGradeChange()">
+            <option value="">-- Chọn khối --</option>
+            <option value="3">Khối 3</option>
+            <option value="4">Khối 4</option>
+            <option value="5">Khối 5</option>
           </select>
-
-          <label for="software" style="margin-top:12px;">🧩 Chọn phần mềm</label>
-          <select id="software" name="software" required>
-            <option value="">-- chọn phần mềm --</option>
-            {% for s in softwares %}
-              <option value="{{s}}" {% if s==selected_software %}selected{% endif %}>{{s}}</option>
-            {% endfor %}
-          </select>
-
-          <label style="margin-top:12px;">📂 Tải tệp bài làm (pptx / docx / sb3)</label>
-          <input type="file" name="file" accept=".pptx,.docx,.sb3,.zip" required>
-
-          <div style="margin-top:12px;">
-            <button class="btn" type="submit">Bắt đầu chấm</button>
-          </div>
         </div>
 
-        <div class="col panel">
-          <label>📋 Tiêu chí chấm (tự lấy từ thư mục <code>/criteria</code>)</label>
-          {% if criteria %}
-            <ul class="criteria-list">
-              {% for it in criteria %}
-                <li><strong>{{ it.mo_ta }}</strong> — <em>{{ it.diem }}đ</em></li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <div class="note">Chưa có tiêu chí hiển thị. Sau khi chọn khối + phần mềm, hệ thống sẽ nạp tiêu chí tự động (từ folder <code>criteria/</code>).</div>
-          {% endif %}
-          {% if message %}
-            <div style="margin-top:10px;color:#b03;">⚠️ {{ message }}</div>
-          {% endif %}
+        <div style="min-width:160px;">
+          <label>Chọn lớp</label>
+          <select name="class" id="class">
+            <option value="">-- Chọn lớp --</option>
+            {% for cls in classes %}
+              <option value="{{ cls }}">{{ cls }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="min-width:200px;">
+          <label>Chọn môn</label>
+          <select name="subject" id="subject">
+            <option value="">-- Chọn môn --</option>
+            <option value="Word">Word</option>
+            <option value="PowerPoint">PowerPoint</option>
+            <option value="Scratch">Scratch</option>
+          </select>
+        </div>
+
+        <div style="flex:1; min-width:260px;">
+          <label>Chọn tệp (docx / pptx / sb3)</label>
+          <input type="file" name="file" accept=".docx,.pptx,.sb3,.zip" required>
+        </div>
+
+        <div style="align-self:flex-end;">
+          <button type="submit" class="btn">📤 Nộp & Chấm</button>
         </div>
       </div>
     </form>
 
     {% if result %}
-    <div class="result-box panel" style="margin-top:14px;">
-      <h3>Kết quả chấm — {{ result.student }}</h3>
-      <p><strong>File:</strong> {{ result.file }} &nbsp; • &nbsp; <strong>Điểm:</strong> {{ result.score }}/10</p>
-      <div>
-        <strong>Nhận xét:</strong>
+      <div class="result" style="margin-top:14px;">
+        <div><span class="success">✅ Bài đã chấm xong!</span></div>
+        <div style="margin-top:8px;"><strong>Họ tên:</strong> {{ result.student }} &nbsp;&nbsp; <strong>Lớp:</strong> {{ result.class }} &nbsp;&nbsp; <strong>Môn:</strong> {{ result.subject }}</div>
+        <div style="margin-top:6px;"><strong>Điểm:</strong> {{ result.total }} / 10 &nbsp;&nbsp; <strong>Nhận xét:</strong> {{ result.remark }}</div>
+
+        <hr style="margin:8px 0; border:none; border-top:1px solid #e6eef8;">
+        <div style="font-size:14px;"><strong>Chi tiết tiêu chí:</strong></div>
         <ul>
-          {% for n in result.notes %}
-            <li>{{ n }}</li>
+          {% for line in result.notes %}
+            <li>{{ line }}</li>
           {% endfor %}
         </ul>
       </div>
-      <div style="margin-top:8px;">
-        <a href="/static/{{ result.file }}" style="font-size:0.9rem;color:var(--accent);">(Tải lại tệp đã nộp)</a>
-      </div>
-    </div>
     {% endif %}
 
-    <div class="footer">
-      <div class="note">📁 Kết quả lưu trong thư mục <code>/results</code> (mỗi lớp 1 file Excel)</div>
-      <div>👁️ Lượt truy cập: {{ counter }}</div>
-    </div>
+    <div class="footer">© AI-TIN • Thống kê lượt truy cập: {{ visit_count }}</div>
   </div>
 
-<script>
-  // front-end: hide/show software options based on selected class (khối)
-  const classSelect = document.getElementById('lop');
-  const softwareSelect = document.getElementById('software');
+  <div class="visitbox">Lượt truy cập: {{ visit_count }}</div>
 
-  function adjustSoftwareOptions() {
-    const val = classSelect.value;
-    if (!val) return;
-    const grade = parseInt(val.charAt(0));
-    // allowed mapping (must match server-side)
-    const map = {
-      3: ["PowerPoint"],
-      4: ["Word","PowerPoint","Scratch"],
-      5: ["Word","Scratch"]
-    };
-    const allowed = map[grade] || ["PowerPoint","Word","Scratch"];
-    // clear and re-add
-    softwareSelect.innerHTML = "<option value=''>-- chọn phần mềm --</option>";
-    allowed.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s; opt.innerText = s;
-      softwareSelect.appendChild(opt);
-    });
-  }
-
-  classSelect.addEventListener('change', adjustSoftwareOptions);
-  // initial run if class pre-selected
-  if (classSelect.value) adjustSoftwareOptions();
-</script>
+  <script>
+    // Ẩn/hiện môn theo khối (client-side)
+    const avail = {{ avail_by_grade|tojson }};
+    function onGradeChange(){
+      const g = document.getElementById('grade').value;
+      const subj = document.getElementById('subject');
+      // reset
+      for (let i=0; i<subj.options.length; i++){
+        subj.options[i].style.display = 'block';
+        subj.options[i].disabled = false;
+      }
+      if (!g) return;
+      // hide not allowed
+      const allowed = avail[g] || [];
+      for (let i=0; i<subj.options.length; i++){
+        const val = subj.options[i].value;
+        if (val && !allowed.includes(val)){
+          subj.options[i].style.display = 'none';
+          subj.options[i].disabled = true;
+        }
+      }
+      // auto-select first allowed
+      for (let i=0; i<subj.options.length; i++){
+        if (!subj.options[i].disabled && subj.options[i].value){
+          subj.selectedIndex = i; break;
+        }
+      }
+      // change background image according to grade
+      let bg = "/static/bg_default.jpg";
+      if (g === "3") bg = "/static/bg_3.jpg";
+      if (g === "4") bg = "/static/bg_4.jpg";
+      if (g === "5") bg = "/static/bg_5.jpg";
+      document.body.style.background = "url('"+bg+"') no-repeat center center / cover";
+    }
+  </script>
 </body>
 </html>
