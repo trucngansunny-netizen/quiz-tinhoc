@@ -107,8 +107,8 @@
   <div class="visitbox">Lượt truy cập: {{ visit_count }}</div>
 
   <script>
-    // Ẩn/hiện môn theo khối (client-side)
-    const avail = {{ avail_by_grade|tojson }};
+    // ✅ Chỉnh dòng này: đảm bảo avail_by_grade luôn là JSON hợp lệ
+    const avail = {{ avail_by_grade | tojson | safe }};
     function onGradeChange(){
       const g = document.getElementById('grade').value;
       const subj = document.getElementById('subject');
@@ -133,7 +133,7 @@
           subj.selectedIndex = i; break;
         }
       }
-      // change background image according to grade
+      // đổi nền theo khối
       let bg = "/static/bg_default.jpg";
       if (g === "3") bg = "/static/bg_3.jpg";
       if (g === "4") bg = "/static/bg_4.jpg";
