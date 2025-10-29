@@ -65,15 +65,33 @@ def home():
         else:
             message = "⚠️ Vui lòng chọn lớp học."
 
+       # --- trước khi trả về template: tạo dict avail_by_grade để template dùng (tránh Undefined) ---
+    # subjects và tên file tương ứng trong thư mục criteria
+    subj_file_map = {
+        "word":   lambda g: f"word{g}.json",
+        "powerpoint": lambda g: f"ppt{g}.json",
+        "scratch": lambda g: f"scratch{g}.json",
+    }
+
+    avail_by_grade = {}
+    for g in ("3", "4", "5"):
+        avail = {}
+        for subj, fn_builder in subj_file_map.items():
+            fname = fn_builder(g)
+            path = os.path.join(CRITERIA_DIR, fname)
+            avail[subj] = os.path.exists(path)
+        avail_by_grade[g] = avail
+
     return render_template(
         "index.html",
         selected_class=selected_class,
         selected_software=selected_software,
         criteria=criteria,
         message=message,
-        background=background
+        background=background,
+        avail_by_grade=avail_by_grade  # <-- thêm biến này cho template (đã có tojson)
     )
-
 
 if __name__ == "__main__":
     app.run(debug=True)
+
