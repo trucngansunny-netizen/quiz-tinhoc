@@ -15,6 +15,11 @@ def get_background_for_grade(grade):
         "5": "bg_5.jpg"
     }.get(grade, "bg_default.jpg")
 
+CLASSES = [
+    "3A1","3A2","3A3","3A4",
+    "4A1","4A2","4A3","4A4","4A5",
+    "5A1","5A2","5A3","5A4","5A5"
+]
 
 # --- Tải file tiêu chí ---
 def load_criteria(software, grade):
@@ -94,4 +99,5 @@ def home():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
