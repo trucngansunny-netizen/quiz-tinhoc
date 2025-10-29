@@ -133,6 +133,8 @@ def grade_word(file_path, criteria):
 
 # ---------------- PPT grading ----------------
 def grade_ppt(file_path, criteria):
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
     try:
         prs = Presentation(file_path)
         slides = prs.slides
@@ -150,53 +152,61 @@ def grade_ppt(file_path, criteria):
     notes = []
     num_slides = len(slides)
 
-       # === Hàm nhận dạng hình ảnh (cực mở rộng) ===
+    # === Hàm nhận diện hình ảnh (full mở rộng) ===
     def shape_has_picture(shape):
-        """Nhận diện mọi loại hình ảnh, kể cả nền, SmartArt, biểu đồ, nhóm, biểu tượng."""
+        """Nhận diện mọi loại hình ảnh, kể cả ảnh nền, nhóm, SmartArt, biểu đồ, SVG, icon, webp..."""
         try:
             xml = shape._element.xml.lower()
 
-            # 1️⃣ Ảnh chèn trực tiếp
+            # 1️⃣ Hình ảnh trực tiếp
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 return True
 
-            # 2️⃣ Ảnh nền của shape (fill type = 6)
-            if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
-                return True
-
-            # 3️⃣ Kiểm tra XML có tag ảnh
-            if any(tag in xml for tag in ["p:pic", "a:blip", "a:blipfill", "blipfill"]):
-                return True
-
-            # 4️⃣ Ảnh trong nhóm (GroupShape)
+            # 2️⃣ Hình ảnh trong nhóm
             if shape.shape_type == MSO_SHAPE_TYPE.GROUP and hasattr(shape, "shapes"):
                 return any(shape_has_picture(s) for s in shape.shapes)
 
-            # 5️⃣ Ảnh trong SmartArt, Chart, Table
+            # 3️⃣ Ảnh nền của shape
+            if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
+                return True
+
+            # 4️⃣ Ảnh trong SmartArt, Chart, Table, Canvas
             if shape.shape_type in (
                 MSO_SHAPE_TYPE.CHART,
                 MSO_SHAPE_TYPE.SMART_ART,
                 MSO_SHAPE_TYPE.TABLE,
                 MSO_SHAPE_TYPE.CANVAS,
             ):
-                if any(tag in xml for tag in ["blip", "pic", "a:blip"]):
+                if any(tag in xml for tag in ["a:blip", "p:pic", "a:blipfill", "blipfill", "svgblip"]):
                     return True
 
-            # 6️⃣ Ảnh được chèn làm biểu tượng (Icon / SVG)
-            if "svgblip" in xml or "picture" in xml:
+            # 5️⃣ Icon hoặc SVG (ảnh dạng vector)
+            if "svgblip" in xml or "picture" in xml or "a:extlst" in xml:
                 return True
+
+            # 6️⃣ Ảnh web (dạng link hoặc data URI)
+            if "http" in xml and any(ext in xml for ext in [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".jfif"]):
+                return True
+
+            # 7️⃣ Ảnh chèn từ clipboard (OfficeArt tag)
+            if any(tag in xml for tag in ["p14:media", "p:blip", "a:blip", "blip"]):
+                return True
+
         except Exception:
             pass
         return False
 
+    # Kiểm tra có ít nhất 1 ảnh
     has_picture_any = any(
         shape_has_picture(shape)
         for slide in slides
         for shape in slide.shapes
     )
 
+    # Kiểm tra có hiệu ứng chuyển trang
     has_transition_any = any("transition" in slide._element.xml for slide in slides)
 
+    # Gom toàn bộ text để kiểm tra chữ có dấu / không dấu
     ppt_text = ""
     for slide in slides:
         for shape in slide.shapes:
@@ -204,6 +214,7 @@ def grade_ppt(file_path, criteria):
                 ppt_text += " " + (shape.text or "")
     ppt_text_noaccent = normalize_text_no_diacritics(ppt_text)
 
+    # === Duyệt tiêu chí ===
     for it in items:
         desc = it.get("mo_ta", "").strip()
         key = (it.get("key") or "").lower()
@@ -213,19 +224,25 @@ def grade_ppt(file_path, criteria):
         if key == "min_slides":
             val = int(it.get("value", 1))
             ok = num_slides >= val
+
         elif key == "has_image":
             ok = has_picture_any
+
         elif key == "has_transition":
             ok = has_transition_any
+
         elif key == "title_first":
             if slides:
                 first = slides[0]
                 ok = any(shape.has_text_frame and shape.text.strip() for shape in first.shapes)
+
         elif key.startswith("contains:"):
             terms = key.split(":", 1)[1].split("|")
             ok = any(normalize_text_no_diacritics(t.strip()) in ppt_text_noaccent for t in terms if t.strip())
+
         elif key == "any":
             ok = True
+
         else:
             words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
             ok = any(w in ppt_text_noaccent for w in words if len(w) > 1)
@@ -310,4 +327,5 @@ def grade_scratch(file_path, criteria):
             ok = flags.get("has_interaction", False)
         elif key == "has_variable":
             ok = f
+
 
