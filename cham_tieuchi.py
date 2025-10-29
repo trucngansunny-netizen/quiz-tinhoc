@@ -207,7 +207,6 @@ has_picture_any = any(
     for shape in slide.shapes
 )
 
-
     has_transition_any = any("transition" in slide._element.xml for slide in slides)
 
     # Gom tất cả text (cả có dấu và không dấu)
@@ -354,6 +353,7 @@ def grade_scratch(file_path, criteria):
             notes.append(f"❌ {desc} (+0)")
     total_awarded = round(total_awarded, 2)
     return total_awarded, notes
+
 
 
 
