@@ -1,22 +1,25 @@
-# cham_tieuchi.py
-# Phiên bản: giữ nguyên chức năng đọc tiêu chí và kiểm tra, KHÔNG quy về 10 (trả về điểm raw)
-
 import os
 import json
 import zipfile
 import tempfile
 import shutil
 import re
+import unicodedata
 
 from docx import Document
 from pptx import Presentation
 
 # ---------------- Utilities ----------------
+def normalize_text_no_diacritics(s):
+    """Chuẩn hóa chuỗi: bỏ dấu tiếng Việt, đưa về chữ thường."""
+    if not isinstance(s, str):
+        return ""
+    s = s.lower()
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(ch for ch in s if unicodedata.category(ch) != 'Mn')
+    return s
+
 def pretty_name_from_filename(filename):
-    """
-    Trích tên học sinh từ tên file (bỏ đuôi, tách camel/case, thay _ và - bằng space)
-    Ví dụ: "LeAnhDung.pptx" -> "Le Anh Dung"
-    """
     base = os.path.splitext(os.path.basename(filename))[0]
     s = base.replace("_", " ").replace("-", " ")
     s = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', s)
@@ -26,12 +29,6 @@ def pretty_name_from_filename(filename):
     return " ".join(parts)
 
 def find_criteria_file(subject_prefix, grade, criteria_folder="criteria"):
-    """
-    Try many filename patterns to locate the JSON criteria file.
-    subject_prefix: e.g. "ppt", "word", "scratch" (lowercase)
-    grade: int 3/4/5
-    returns full path or None
-    """
     patterns = [
         f"{subject_prefix}{grade}.json",
         f"{subject_prefix}_khoi{grade}.json",
@@ -46,27 +43,18 @@ def find_criteria_file(subject_prefix, grade, criteria_folder="criteria"):
         full = os.path.join(criteria_folder, p)
         if os.path.exists(full):
             return full
-    # also try scanning folder for variants containing subject and grade
     if os.path.isdir(criteria_folder):
         for fn in os.listdir(criteria_folder):
             lower = fn.lower()
-            if lower.endswith(".json") and subject_prefix.lower() in lower and str(grade) in lower:
+            if fn.lower().startswith(subject_prefix.lower()) and str(grade) in lower and fn.lower().endswith(".json"):
                 return os.path.join(criteria_folder, fn)
     return None
 
 def load_criteria(subject, grade, criteria_folder="criteria"):
-    """
-    Load and normalize criteria file.
-    subject: "word"/"ppt"/"scratch" or "Word"/"PowerPoint"/"Scratch"
-    grade: int or str
-    returns dict like {"tieu_chi": [ {mo_ta, diem, key?, value?}, ... ] } or None
-    """
-    # normalize grade
     if isinstance(grade, str) and grade.isdigit():
         grade = int(grade)
-    # normalize subject prefix
-    s = (subject or "").lower()
-    if s in ("powerpoint", "ppt", "pptx", "bai thuyet trinh"):
+    s = subject.lower()
+    if s in ("powerpoint", "ppt", "pptx"):
         pref = "ppt"
     elif s in ("word", "docx", "doc"):
         pref = "word"
@@ -78,49 +66,141 @@ def load_criteria(subject, grade, criteria_folder="criteria"):
     path = find_criteria_file(pref, grade, criteria_folder)
     if not path:
         return None
-
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if isinstance(data, dict) and "tieu_chi" in data:
+            for it in data["tieu_chi"]:
+                if "diem" in it:
+                    try:
+                        it["diem"] = float(it["diem"])
+                    except:
+                        it["diem"] = 0.0
+                else:
+                    it["diem"] = 0.0
+            return data
+        elif isinstance(data, list):
+            return {"tieu_chi": data}
     except Exception:
         return None
+    return None
 
-    # normalize structure
-    if isinstance(data, dict) and "tieu_chi" in data:
-        # ensure diem numeric
-        for it in data["tieu_chi"]:
-            if "diem" in it:
-                try:
-                    it["diem"] = float(it["diem"])
-                except:
-                    it["diem"] = 0.0
-            else:
-                it["diem"] = 0.0
-        return data
-    elif isinstance(data, list):
-        # convert list to dict format
-        normalized = {"tieu_chi": []}
-        for it in data:
-            if isinstance(it, dict):
-                item = dict(it)
-                if "diem" in item:
-                    try:
-                        item["diem"] = float(item["diem"])
-                    except:
-                        item["diem"] = 0.0
-                else:
-                    item["diem"] = 0.0
-                normalized["tieu_chi"].append(item)
-        return normalized
-    else:
-        return None
+# ---------------- Word grading ----------------
+def grade_word(file_path, criteria):
+    try:
+        doc = Document(file_path)
+    except Exception as e:
+        return None, [f"Lỗi đọc file Word: {e}"]
 
-# ---------------- Scratch analysis ----------------
+    text = normalize_text_no_diacritics("\n".join([p.text for p in doc.paragraphs]))
+
+    items = criteria.get("tieu_chi", [])
+    total_awarded = 0.0
+    notes = []
+
+    for it in items:
+        desc = it.get("mo_ta", "").strip()
+        key = it.get("key", "").lower() if it.get("key") else ""
+        diem = float(it.get("diem", 0) or 0)
+        ok = False
+
+        if key == "has_title":
+            ok = any(len(p.text.strip()) > 0 for p in doc.paragraphs[:2])
+        elif key == "has_name":
+            ok = any(k in text for k in ["ho ten", "ten hoc sinh", "ho va ten"])
+        elif key == "has_image":
+            ok = bool(doc.inline_shapes) or "graphicdata" in normalize_text_no_diacritics("\n".join(p._element.xml for p in doc.paragraphs))
+        elif key == "format_text":
+            bold_text = any(run.bold for p in doc.paragraphs for run in p.runs if run.bold)
+            ok = bold_text
+        elif key == "any":
+            ok = True
+        elif key.startswith("contains:"):
+            terms = key.split(":",1)[1].split("|")
+            ok = any(normalize_text_no_diacritics(t) in text for t in terms)
+        else:
+            words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
+            ok = any(w for w in words if len(w) > 1 and w in text)
+
+        if ok:
+            total_awarded += diem
+            notes.append(f"✅ {desc} (+{diem})")
+        else:
+            notes.append(f"❌ {desc} (+0)")
+
+    total_awarded = round(total_awarded, 2)
+    return total_awarded, notes
+
+# ---------------- PPT grading ----------------
+def grade_ppt(file_path, criteria):
+    try:
+        prs = Presentation(file_path)
+        slides = prs.slides
+    except Exception as e:
+        return None, [f"Lỗi đọc file PowerPoint: {e}"]
+
+    items = criteria.get("tieu_chi", [])
+    total_awarded = 0.0
+    notes = []
+
+    num_slides = len(slides)
+    has_picture_any = any(getattr(shape, "shape_type", None) == 13 for slide in slides for shape in slide.shapes)
+    has_transition_any = any("transition" in slide._element.xml for slide in slides)
+    ppt_text = normalize_text_no_diacritics(" ".join(shape.text for slide in slides for shape in slide.shapes if getattr(shape, "has_text_frame", False)))
+
+    for it in items:
+        desc = it.get("mo_ta", "").strip()
+        key = it.get("key", "").lower() if it.get("key") else ""
+        diem = float(it.get("diem", 0) or 0)
+        ok = False
+
+        if key == "min_slides":
+            val = int(it.get("value", 1))
+            ok = num_slides >= val
+        elif key == "title_first":
+            if slides:
+                first = slides[0]
+                ok = any(shape.has_text_frame and shape.text.strip() for shape in first.shapes)
+        elif key == "has_image":
+            ok = has_picture_any
+        elif key == "has_transition":
+            ok = has_transition_any
+        elif key == "format_text":
+            bold_or_colored = False
+            for slide in slides:
+                for shape in slide.shapes:
+                    if not getattr(shape, "has_text_frame", False): continue
+                    for paragraph in shape.text_frame.paragraphs:
+                        for run in paragraph.runs:
+                            try:
+                                if run.font.bold or (run.font.color and hasattr(run.font.color, "rgb") and run.font.color.rgb):
+                                    bold_or_colored = True; break
+                            except Exception:
+                                continue
+                        if bold_or_colored: break
+                    if bold_or_colored: break
+                if bold_or_colored: break
+            ok = bold_or_colored
+        elif key == "any":
+            ok = True
+        elif key.startswith("contains:"):
+            terms = key.split(":",1)[1].split("|")
+            ok = any(normalize_text_no_diacritics(t) in ppt_text for t in terms)
+        else:
+            words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
+            ok = any(w for w in words if len(w) > 1 and w in ppt_text)
+
+        if ok:
+            total_awarded += diem
+            notes.append(f"✅ {desc} (+{diem})")
+        else:
+            notes.append(f"❌ {desc} (+0)")
+
+    total_awarded = round(total_awarded, 2)
+    return total_awarded, notes
+
+# ---------------- Scratch grading ----------------
 def analyze_sb3_basic(file_path):
-    """
-    Extract simple flags from .sb3 project.json for Scratch checks.
-    Returns (flags_dict, []) or (None, [error_message])
-    """
     tempdir = None
     try:
         tempdir = tempfile.mkdtemp(prefix="sb3_")
@@ -147,7 +227,7 @@ def analyze_sb3_basic(file_path):
                 flags["has_variable"] = True
             blocks = t.get("blocks", {})
             for block_id, block in blocks.items():
-                opcode = (block.get("opcode") or "").lower()
+                opcode = block.get("opcode", "").lower()
                 if any(k in opcode for k in ["control_repeat","control_forever","control_repeat_until"]):
                     flags["has_loop"] = True
                 if any(k in opcode for k in ["control_if","control_if_else"]):
@@ -169,186 +249,37 @@ def analyze_sb3_basic(file_path):
             except Exception:
                 pass
 
-# ---------------- Grading functions (RAW scores, no scaling to 10) ----------------
-
-# WORD
-def grade_word(file_path, criteria):
-    """
-    Chấm Word: trả về (total_awarded_raw, notes_list)
-    notes_list chứa từng dòng dạng "✅ Mo ta (+earned/original)" hoặc "❌ Mo ta (+0/original)"
-    """
-    try:
-        doc = Document(file_path)
-    except Exception as e:
-        return None, [f"Lỗi đọc file Word: {e}"]
-
-    text = "\n".join([p.text for p in doc.paragraphs]).lower()
-    items = criteria.get("tieu_chi", [])
-
-    total_awarded = 0.0
-    total_max = 0.0
-    notes = []
-
-    for it in items:
-        desc = it.get("mo_ta", "").strip()
-        key = it.get("key", "").lower() if it.get("key") else ""
-        pts = float(it.get("diem", 0) or 0)
-        total_max += pts
-        ok = False
-
-        # kiểm tra theo key (các key chung hay dùng)
-        if key == "has_title":
-            ok = any(len(p.text.strip()) > 0 for p in doc.paragraphs[:2])
-        elif key == "has_name":
-            ok = bool(re.search(r"\b(họ tên|họ và tên|tên học sinh|họ tên:)\b", text))
-        elif key == "has_image":
-            # detect inline shape xml in paragraphs
-            ok = any("graphicData" in p._element.xml for p in doc.paragraphs)
-        elif key == "format_text":
-            ok = any(run.bold for p in doc.paragraphs for run in p.runs if getattr(run, "bold", False))
-        elif key == "any":
-            ok = True
-        elif key.startswith("contains:"):
-            terms = key.split(":", 1)[1].split("|")
-            ok = any(t.strip().lower() in text for t in terms)
-        else:
-            # fallback: check words from description
-            words = re.findall(r"\w+", desc.lower())
-            ok = any(w for w in words if len(w) > 1 and w in text)
-
-        earned = pts if ok else 0.0
-        total_awarded += earned
-        mark = "✅" if ok else "❌"
-        notes.append(f"{mark} {desc} (+{earned}/{pts})")
-
-    notes.append(f"— Tổng điểm: {round(total_awarded,2)}/{round(total_max,2)}")
-    return round(total_awarded,2), notes
-
-# POWERPOINT
-def grade_ppt(file_path, criteria):
-    """
-    Chấm PowerPoint: trả về (total_awarded_raw, notes_list)
-    """
-    try:
-        prs = Presentation(file_path)
-        slides = prs.slides
-    except Exception as e:
-        return None, [f"Lỗi đọc file PowerPoint: {e}"]
-
-    items = criteria.get("tieu_chi", [])
-    total_awarded = 0.0
-    total_max = 0.0
-    notes = []
-
-    # aggregate ppt info
-    num_slides = len(slides)
-    has_picture_any = any(getattr(shape, "shape_type", None) == 13 for slide in slides for shape in slide.shapes)
-    has_transition_any = any("transition" in (slide._element.xml or "") for slide in slides)
-    ppt_text = ""
-    for slide in slides:
-        for shape in slide.shapes:
-            if getattr(shape, "has_text_frame", False):
-                ppt_text += " " + (shape.text or "")
-    ppt_text = ppt_text.lower()
-
-    for it in items:
-        desc = it.get("mo_ta", "").strip()
-        key = it.get("key", "").lower() if it.get("key") else ""
-        pts = float(it.get("diem", 0) or 0)
-        total_max += pts
-        ok = False
-
-        if key == "min_slides":
-            try:
-                val = int(it.get("value", 1))
-            except:
-                val = 1
-            ok = num_slides >= val
-        elif key == "title_first":
-            if slides:
-                first = slides[0]
-                ok = any(shape.has_text_frame and shape.text.strip() for shape in first.shapes)
-            else:
-                ok = False
-        elif key == "has_image":
-            ok = has_picture_any
-        elif key == "has_transition":
-            ok = has_transition_any
-        elif key == "format_text":
-            bold_or_colored = False
-            for slide in slides:
-                for shape in slide.shapes:
-                    if not getattr(shape, "has_text_frame", False):
-                        continue
-                    for paragraph in shape.text_frame.paragraphs:
-                        for run in paragraph.runs:
-                            try:
-                                if getattr(run.font, "bold", False):
-                                    bold_or_colored = True
-                                    break
-                                if getattr(run.font, "color", None) and hasattr(run.font.color, "rgb") and run.font.color.rgb:
-                                    bold_or_colored = True
-                                    break
-                            except Exception:
-                                continue
-                        if bold_or_colored:
-                            break
-                    if bold_or_colored:
-                        break
-                if bold_or_colored:
-                    break
-            ok = bold_or_colored
-        elif key == "any":
-            ok = True
-        elif key.startswith("contains:"):
-            terms = key.split(":", 1)[1].split("|")
-            ok = any(t.strip().lower() in ppt_text for t in terms)
-        else:
-            words = re.findall(r"\w+", desc.lower())
-            ok = any(w for w in words if len(w) > 1 and w in ppt_text)
-
-        earned = pts if ok else 0.0
-        total_awarded += earned
-        mark = "✅" if ok else "❌"
-        notes.append(f"{mark} {desc} (+{earned}/{pts})")
-
-    notes.append(f"— Tổng điểm: {round(total_awarded,2)}/{round(total_max,2)}")
-    return round(total_awarded,2), notes
-
-# SCRATCH
 def grade_scratch(file_path, criteria):
-    """
-    Chấm Scratch (sb3): trả về (total_awarded_raw, notes_list)
-    """
     flags, err = analyze_sb3_basic(file_path)
     if flags is None:
         return None, err
 
     items = criteria.get("tieu_chi", [])
     total_awarded = 0.0
-    total_max = 0.0
     notes = []
-
     for it in items:
         desc = it.get("mo_ta", "").strip()
         key = it.get("key", "").lower() if it.get("key") else ""
-        pts = float(it.get("diem", 0) or 0)
-        total_max += pts
+        diem = float(it.get("diem", 0) or 0)
         ok = False
-
-        # nếu key là 1 trong flags
-        if key and key in flags:
-            ok = bool(flags.get(key, False))
+        if key == "has_loop":
+            ok = flags.get("has_loop", False)
+        elif key == "has_condition":
+            ok = flags.get("has_condition", False)
+        elif key == "has_interaction":
+            ok = flags.get("has_interaction", False)
+        elif key == "has_variable":
+            ok = flags.get("has_variable", False)
+        elif key == "multiple_sprites_or_animation":
+            ok = flags.get("multiple_sprites_or_animation", False)
         elif key == "any":
             ok = True
         else:
-            # fallback: check keywords in description
-            ok = any(k in desc.lower() for k in ["vòng", "lặp", "biến", "broadcast", "phát sóng", "điều kiện", "nối", "sprite"])
-
-        earned = pts if ok else 0.0
-        total_awarded += earned
-        mark = "✅" if ok else "❌"
-        notes.append(f"{mark} {desc} (+{earned}/{pts})")
-
-    notes.append(f"— Tổng điểm: {round(total_awarded,2)}/{round(total_max,2)}")
-    return round(total_awarded,2), notes
+            ok = any(k in desc.lower() for k in ["vòng", "lặp", "biến", "phát sóng", "điều kiện", "nối"])
+        if ok:
+            total_awarded += diem
+            notes.append(f"✅ {desc} (+{diem})")
+        else:
+            notes.append(f"❌ {desc} (+0)")
+    total_awarded = round(total_awarded, 2)
+    return total_awarded, notes
