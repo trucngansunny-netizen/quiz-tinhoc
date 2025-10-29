@@ -133,6 +133,7 @@ def grade_word(file_path, criteria):
 
 # ---------------- PPT grading ----------------
 def grade_ppt(file_path, criteria):
+    import unicodedata
     from pptx.enum.shapes import MSO_SHAPE_TYPE
     try:
         prs = Presentation(file_path)
@@ -140,7 +141,7 @@ def grade_ppt(file_path, criteria):
     except Exception as e:
         return None, [f"Lỗi đọc file PowerPoint: {e}"]
 
-    # chuẩn hóa không chia 10 nữa
+    # không chia 10 nữa, lấy đúng điểm gốc
     items = criteria.get("tieu_chi", [])
     for it in items:
         try:
@@ -151,24 +152,47 @@ def grade_ppt(file_path, criteria):
     total_awarded = 0.0
     notes = []
 
-    # tổng hợp thông tin slide
     num_slides = len(slides)
 
-    # kiểm tra có hình ảnh
+    # ======== HÀM HỖ TRỢ ========
+    def no_accent_vn(text):
+        """Bỏ dấu tiếng Việt để so sánh không phân biệt có dấu."""
+        return ''.join(
+            c for c in unicodedata.normalize('NFD', text)
+            if unicodedata.category(c) != 'Mn'
+        )
+
+    def shape_has_picture(shape):
+        """Nhận biết bất kỳ hình ảnh nào, kể cả group, SmartArt, background."""
+        try:
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                return True
+            # nếu là nhóm
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                for s in shape.shapes:
+                    if shape_has_picture(s):
+                        return True
+            # kiểm tra background có ảnh
+            if hasattr(shape, "fill") and hasattr(shape.fill, "type"):
+                fill = shape.fill
+                if getattr(fill, "type", None) == 6:  # picture fill
+                    return True
+            # kiểm tra XML nếu chứa tag <p:pic>
+            if "p:pic" in shape._element.xml or "a:blip" in shape._element.xml:
+                return True
+        except Exception:
+            pass
+        return False
+
+    # ======== KIỂM TRA CÓ HÌNH ========
     has_picture_any = any(
-        getattr(shape, "shape_type", None) == MSO_SHAPE_TYPE.PICTURE
+        shape_has_picture(shape)
         for slide in slides for shape in slide.shapes
     )
 
-    # kiểm tra có hiệu ứng chuyển
     has_transition_any = any("transition" in slide._element.xml for slide in slides)
 
-    # gom toàn bộ text (bỏ dấu để so dễ hơn)
-    import unicodedata
-    def no_accent_vn(text):
-        return ''.join(c for c in unicodedata.normalize('NFD', text)
-                       if unicodedata.category(c) != 'Mn')
-
+    # Gom tất cả text (cả có dấu và không dấu)
     ppt_text = ""
     for slide in slides:
         for shape in slide.shapes:
@@ -176,7 +200,7 @@ def grade_ppt(file_path, criteria):
                 ppt_text += " " + (shape.text or "")
     ppt_text_noaccent = no_accent_vn(ppt_text.lower())
 
-    # duyệt từng tiêu chí
+    # ======== DUYỆT TIÊU CHÍ ========
     for it in items:
         desc = it.get("mo_ta", "").strip()
         key = (it.get("key") or "").lower()
@@ -196,10 +220,12 @@ def grade_ppt(file_path, criteria):
         elif key == "title_first":
             if slides:
                 first = slides[0]
-                ok = any(shape.has_text_frame and shape.text.strip() for shape in first.shapes)
+                ok = any(
+                    shape.has_text_frame and shape.text.strip()
+                    for shape in first.shapes
+                )
 
         elif key.startswith("contains:"):
-            # hỗ trợ tìm không dấu
             terms = key.split(":", 1)[1].split("|")
             ok = any(
                 no_accent_vn(t.strip().lower()) in ppt_text_noaccent
@@ -210,10 +236,10 @@ def grade_ppt(file_path, criteria):
             ok = True
 
         else:
-            # fallback: so từ mô tả
             words = re.findall(r"\w+", desc.lower())
             ok = any(
-                no_accent_vn(w) in ppt_text_noaccent for w in words if len(w) > 1
+                no_accent_vn(w) in ppt_text_noaccent
+                for w in words if len(w) > 1
             )
 
         if ok:
@@ -310,4 +336,5 @@ def grade_scratch(file_path, criteria):
             notes.append(f"❌ {desc} (+0)")
     total_awarded = round(total_awarded, 2)
     return total_awarded, notes
+
 
