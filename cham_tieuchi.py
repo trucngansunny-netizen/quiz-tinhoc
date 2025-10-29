@@ -152,56 +152,29 @@ def grade_ppt(file_path, criteria):
     notes = []
     num_slides = len(slides)
 
-    # === Hàm nhận diện hình ảnh (full mở rộng) ===
-    def shape_has_picture(shape):
-        """Nhận diện mọi loại hình ảnh, kể cả ảnh nền, nhóm, SmartArt, biểu đồ, SVG, icon, webp..."""
+    # === Hàm nhận dạng hình ảnh toàn diện (ảnh Bing, nền, web, nhóm...) ===
+    def slide_has_any_picture(slide):
         try:
-            xml = shape._element.xml.lower()
-
-            # 1️⃣ Hình ảnh trực tiếp
-            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+            xml = slide._element.xml.lower()
+            # nếu slide chứa bất kỳ thẻ hình ảnh nào
+            if any(tag in xml for tag in ["p:pic", "a:blip", "blipfill", "a:blipfill"]):
                 return True
-
-            # 2️⃣ Hình ảnh trong nhóm
-            if shape.shape_type == MSO_SHAPE_TYPE.GROUP and hasattr(shape, "shapes"):
-                return any(shape_has_picture(s) for s in shape.shapes)
-
-            # 3️⃣ Ảnh nền của shape
-            if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
-                return True
-
-            # 4️⃣ Ảnh trong SmartArt, Chart, Table, Canvas
-            if shape.shape_type in (
-                MSO_SHAPE_TYPE.CHART,
-                MSO_SHAPE_TYPE.SMART_ART,
-                MSO_SHAPE_TYPE.TABLE,
-                MSO_SHAPE_TYPE.CANVAS,
-            ):
-                if any(tag in xml for tag in ["a:blip", "p:pic", "a:blipfill", "blipfill", "svgblip"]):
+            # hoặc có shape là ảnh, nhóm, SmartArt chứa ảnh
+            for shape in slide.shapes:
+                st = getattr(shape, "shape_type", None)
+                if st == MSO_SHAPE_TYPE.PICTURE:
                     return True
-
-            # 5️⃣ Icon hoặc SVG (ảnh dạng vector)
-            if "svgblip" in xml or "picture" in xml or "a:extlst" in xml:
-                return True
-
-            # 6️⃣ Ảnh web (dạng link hoặc data URI)
-            if "http" in xml and any(ext in xml for ext in [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".jfif"]):
-                return True
-
-            # 7️⃣ Ảnh chèn từ clipboard (OfficeArt tag)
-            if any(tag in xml for tag in ["p14:media", "p:blip", "a:blip", "blip"]):
-                return True
-
+                if st == MSO_SHAPE_TYPE.GROUP and hasattr(shape, "shapes"):
+                    if any(sub.shape_type == MSO_SHAPE_TYPE.PICTURE for sub in shape.shapes):
+                        return True
+                if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
+                    return True
         except Exception:
             pass
         return False
 
-    # Kiểm tra có ít nhất 1 ảnh
-    has_picture_any = any(
-        shape_has_picture(shape)
-        for slide in slides
-        for shape in slide.shapes
-    )
+    has_picture_any = any(slide_has_any_picture(slide) for slide in slides)
+
 
     # Kiểm tra có hiệu ứng chuyển trang
     has_transition_any = any("transition" in slide._element.xml for slide in slides)
@@ -327,5 +300,6 @@ def grade_scratch(file_path, criteria):
             ok = flags.get("has_interaction", False)
         elif key == "has_variable":
             ok = f
+
 
 
