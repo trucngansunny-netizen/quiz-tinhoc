@@ -150,32 +150,40 @@ def grade_ppt(file_path, criteria):
     notes = []
     num_slides = len(slides)
 
-    # === Hàm nhận dạng hình ảnh (mới, mạnh hơn) ===
+       # === Hàm nhận dạng hình ảnh (cực mở rộng) ===
     def shape_has_picture(shape):
-        """Nhận diện mọi loại hình ảnh trong PowerPoint, kể cả nền, nhóm, SmartArt."""
+        """Nhận diện mọi loại hình ảnh, kể cả nền, SmartArt, biểu đồ, nhóm, biểu tượng."""
         try:
-            # Ảnh chèn trực tiếp
+            xml = shape._element.xml.lower()
+
+            # 1️⃣ Ảnh chèn trực tiếp
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 return True
-            # Ảnh trong nhóm
-            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
-                return any(shape_has_picture(s) for s in shape.shapes)
-            # Ảnh nền (fill type = 6)
+
+            # 2️⃣ Ảnh nền của shape (fill type = 6)
             if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
                 return True
-            # Ảnh trong SmartArt, Chart, Table
+
+            # 3️⃣ Kiểm tra XML có tag ảnh
+            if any(tag in xml for tag in ["p:pic", "a:blip", "a:blipfill", "blipfill"]):
+                return True
+
+            # 4️⃣ Ảnh trong nhóm (GroupShape)
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP and hasattr(shape, "shapes"):
+                return any(shape_has_picture(s) for s in shape.shapes)
+
+            # 5️⃣ Ảnh trong SmartArt, Chart, Table
             if shape.shape_type in (
                 MSO_SHAPE_TYPE.CHART,
                 MSO_SHAPE_TYPE.SMART_ART,
                 MSO_SHAPE_TYPE.TABLE,
                 MSO_SHAPE_TYPE.CANVAS,
             ):
-                xml_str = shape._element.xml.lower()
-                if any(tag in xml_str for tag in ["p:pic", "a:blip", "blipfill", "a:blipfill"]):
+                if any(tag in xml for tag in ["blip", "pic", "a:blip"]):
                     return True
-            # Kiểm tra XML thô
-            xml_str = shape._element.xml.lower()
-            if any(tag in xml_str for tag in ["p:pic", "a:blip", "a:blipfill", "blipfill"]):
+
+            # 6️⃣ Ảnh được chèn làm biểu tượng (Icon / SVG)
+            if "svgblip" in xml or "picture" in xml:
                 return True
         except Exception:
             pass
@@ -302,3 +310,4 @@ def grade_scratch(file_path, criteria):
             ok = flags.get("has_interaction", False)
         elif key == "has_variable":
             ok = f
+
