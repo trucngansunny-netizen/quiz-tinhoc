@@ -2,12 +2,10 @@ from flask import Flask, render_template, request, url_for
 import json
 import os
 
-# --- Khởi tạo ứng dụng Flask ---
-app = Flask(__name__, static_folder="static", template_folder="templates")
+app = Flask(__name__)
 
 # --- Đường dẫn thư mục tiêu chí ---
 CRITERIA_DIR = os.path.join(os.path.dirname(__file__), "criteria")
-
 
 # --- Xác định nền theo khối ---
 def get_background_for_grade(grade):
@@ -18,32 +16,30 @@ def get_background_for_grade(grade):
     }.get(grade, "bg_default.jpg")
 
 
-# --- Hàm tải tiêu chí từ file JSON ---
-def load_criteria(software, grade, criteria_folder="criteria"):
-    """Đọc tiêu chí chấm theo phần mềm và khối"""
-    # Trường hợp không học phần mềm
-    if software == "word" and str(grade) == "3":
-        return {"tieu_chi": [{"mo_ta": "Khối 3 không học phần mềm Word", "diem": ""}]}
-    elif software == "powerpoint" and str(grade) == "5":
-        return {"tieu_chi": [{"mo_ta": "Khối 5 không học phần mềm PowerPoint", "diem": ""}]}
-    elif software == "scratch" and str(grade) == "3":
-        return {"tieu_chi": [{"mo_ta": "Khối 3 không học phần mềm Scratch", "diem": ""}]}
+# --- Tải file tiêu chí ---
+def load_criteria(software, grade):
+    filename = None
 
-    # Đọc file JSON
-    filename = f"{software}{grade}.json"
-    file_path = os.path.join(criteria_folder, filename)
+    # Map file theo khối và phần mềm
+    if software == "word" and grade == "3":
+        return {"tieu_chi": [{"mo_ta": "Khối 3 không học phần mềm Word", "diem": ""}]}
+    elif software == "powerpoint" and grade == "5":
+        return {"tieu_chi": [{"mo_ta": "Khối 5 không học phần mềm PowerPoint", "diem": ""}]}
+    elif software == "scratch" and grade == "3":
+        return {"tieu_chi": [{"mo_ta": "Khối 3 không học phần mềm Scratch", "diem": ""}]}
+    else:
+        filename = f"{software}{grade}.json"
+
+    # 🔧 Chỉ sửa đúng dòng dưới đây, thêm CRITERIA_DIR vào đường dẫn
+    file_path = os.path.join(CRITERIA_DIR, filename)
 
     if os.path.exists(file_path):
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            return {"tieu_chi": [{"mo_ta": f"Lỗi đọc file {filename}: {e}", "diem": ""}]}
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
     else:
         return None
 
 
-# --- Trang chính ---
 @app.route("/", methods=["GET", "POST"])
 def home():
     selected_class = None
@@ -55,15 +51,13 @@ def home():
     if request.method == "POST":
         selected_class = request.form.get("lop", "")
         selected_software = request.form.get("software", "")
-
         if selected_class:
-            grade = selected_class[0]  # Lấy số khối từ lớp (ví dụ: 4A2 -> 4)
+            grade = selected_class[0]  # Lấy số khối từ lớp
             background = get_background_for_grade(grade)
 
             if selected_software:
-                # 🔧 Dòng này đã sửa đúng cú pháp để liên kết tiêu chí
-                criteria = load_criteria(selected_software, grade, criteria_folder=CRITERIA_DIR)
-
+                # 🔧 Chỉ sửa đúng dòng này
+                criteria = load_criteria(selected_software, grade)
                 if not criteria:
                     message = f"⚠️ Khối {grade} hiện chưa có tiêu chí hiển thị (hoặc không học phần mềm này)."
             else:
