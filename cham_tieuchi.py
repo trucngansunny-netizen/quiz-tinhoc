@@ -135,6 +135,7 @@ def grade_word(file_path, criteria):
 def grade_ppt(file_path, criteria):
     import unicodedata
     from pptx.enum.shapes import MSO_SHAPE_TYPE
+
     try:
         prs = Presentation(file_path)
         slides = prs.slides
@@ -153,6 +154,102 @@ def grade_ppt(file_path, criteria):
     notes = []
 
     num_slides = len(slides)
+
+    # ======== HÀM HỖ TRỢ ========
+    def no_accent_vn(text):
+        """Bỏ dấu tiếng Việt để so sánh không phân biệt có dấu."""
+        return ''.join(
+            c for c in unicodedata.normalize('NFD', text)
+            if unicodedata.category(c) != 'Mn'
+        )
+
+    def shape_has_picture(shape):
+        """Nhận biết mọi loại hình ảnh (ảnh chèn, nhóm, nền, SmartArt)."""
+        try:
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                return True
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                for s in shape.shapes:
+                    if shape_has_picture(s):
+                        return True
+            if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
+                return True
+            xml = getattr(shape, "_element", None)
+            if xml is not None:
+                xml_str = xml.xml.lower()
+                if any(tag in xml_str for tag in ["p:pic", "a:blip", "pic:pic", "blipfill"]):
+                    return True
+        except Exception:
+            pass
+        return False
+
+    # ======== PHÂN TÍCH SLIDE ========
+    has_picture_any = any(
+        shape_has_picture(shape)
+        for slide in slides
+        for shape in slide.shapes
+    )
+
+    has_transition_any = any("transition" in slide._element.xml for slide in slides)
+
+    # Gom toàn bộ text (có và không dấu)
+    ppt_text = ""
+    for slide in slides:
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False):
+                ppt_text += " " + (shape.text or "")
+    ppt_text_noaccent = no_accent_vn(ppt_text.lower())
+
+    # ======== DUYỆT TIÊU CHÍ ========
+    for it in items:
+        desc = it.get("mo_ta", "").strip()
+        key = (it.get("key") or "").lower()
+        ori = float(it.get("diem", 0) or 0)
+        ok = False
+
+        if key == "min_slides":
+            val = int(it.get("value", 1))
+            ok = num_slides >= val
+
+        elif key == "has_image":
+            ok = has_picture_any
+
+        elif key == "has_transition":
+            ok = has_transition_any
+
+        elif key == "title_first":
+            if slides:
+                first = slides[0]
+                ok = any(
+                    shape.has_text_frame and shape.text.strip()
+                    for shape in first.shapes
+                )
+
+        elif key.startswith("contains:"):
+            terms = key.split(":", 1)[1].split("|")
+            ok = any(
+                no_accent_vn(t.strip().lower()) in ppt_text_noaccent
+                for t in terms if t.strip()
+            )
+
+        elif key == "any":
+            ok = True
+
+        else:
+            words = re.findall(r"\w+", desc.lower())
+            ok = any(
+                no_accent_vn(w) in ppt_text_noaccent
+                for w in words if len(w) > 1
+            )
+
+        if ok:
+            total_awarded += ori
+            notes.append(f"✅ {desc} (+{ori})")
+        else:
+            notes.append(f"❌ {desc} (+0)")
+
+    total_awarded = round(total_awarded, 2)
+    return total_awarded, notes
 
     # ======== HÀM HỖ TRỢ ========
     def no_accent_vn(text):
@@ -353,6 +450,7 @@ def grade_scratch(file_path, criteria):
             notes.append(f"❌ {desc} (+0)")
     total_awarded = round(total_awarded, 2)
     return total_awarded, notes
+
 
 
 
