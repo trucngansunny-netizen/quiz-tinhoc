@@ -133,71 +133,98 @@ def grade_word(file_path, criteria):
 
 # ---------------- PPT grading ----------------
 def grade_ppt(file_path, criteria):
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
     try:
         prs = Presentation(file_path)
         slides = prs.slides
     except Exception as e:
         return None, [f"Lỗi đọc file PowerPoint: {e}"]
 
+    # chuẩn hóa không chia 10 nữa
     items = criteria.get("tieu_chi", [])
+    for it in items:
+        try:
+            it["diem"] = float(it.get("diem", 0))
+        except:
+            it["diem"] = 0.0
+
     total_awarded = 0.0
     notes = []
 
+    # tổng hợp thông tin slide
     num_slides = len(slides)
-    has_picture_any = any(getattr(shape, "shape_type", None) == 13 for slide in slides for shape in slide.shapes)
-    has_transition_any = any("transition" in slide._element.xml for slide in slides)
-    ppt_text = normalize_text_no_diacritics(" ".join(shape.text for slide in slides for shape in slide.shapes if getattr(shape, "has_text_frame", False)))
 
+    # kiểm tra có hình ảnh
+    has_picture_any = any(
+        getattr(shape, "shape_type", None) == MSO_SHAPE_TYPE.PICTURE
+        for slide in slides for shape in slide.shapes
+    )
+
+    # kiểm tra có hiệu ứng chuyển
+    has_transition_any = any("transition" in slide._element.xml for slide in slides)
+
+    # gom toàn bộ text (bỏ dấu để so dễ hơn)
+    import unicodedata
+    def no_accent_vn(text):
+        return ''.join(c for c in unicodedata.normalize('NFD', text)
+                       if unicodedata.category(c) != 'Mn')
+
+    ppt_text = ""
+    for slide in slides:
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False):
+                ppt_text += " " + (shape.text or "")
+    ppt_text_noaccent = no_accent_vn(ppt_text.lower())
+
+    # duyệt từng tiêu chí
     for it in items:
         desc = it.get("mo_ta", "").strip()
-        key = it.get("key", "").lower() if it.get("key") else ""
-        diem = float(it.get("diem", 0) or 0)
+        key = (it.get("key") or "").lower()
+        ori = float(it.get("diem", 0) or 0)
         ok = False
 
         if key == "min_slides":
             val = int(it.get("value", 1))
             ok = num_slides >= val
+
+        elif key == "has_image":
+            ok = has_picture_any
+
+        elif key == "has_transition":
+            ok = has_transition_any
+
         elif key == "title_first":
             if slides:
                 first = slides[0]
                 ok = any(shape.has_text_frame and shape.text.strip() for shape in first.shapes)
-        elif key == "has_image":
-            ok = has_picture_any
-        elif key == "has_transition":
-            ok = has_transition_any
-        elif key == "format_text":
-            bold_or_colored = False
-            for slide in slides:
-                for shape in slide.shapes:
-                    if not getattr(shape, "has_text_frame", False): continue
-                    for paragraph in shape.text_frame.paragraphs:
-                        for run in paragraph.runs:
-                            try:
-                                if run.font.bold or (run.font.color and hasattr(run.font.color, "rgb") and run.font.color.rgb):
-                                    bold_or_colored = True; break
-                            except Exception:
-                                continue
-                        if bold_or_colored: break
-                    if bold_or_colored: break
-                if bold_or_colored: break
-            ok = bold_or_colored
+
+        elif key.startswith("contains:"):
+            # hỗ trợ tìm không dấu
+            terms = key.split(":", 1)[1].split("|")
+            ok = any(
+                no_accent_vn(t.strip().lower()) in ppt_text_noaccent
+                for t in terms if t.strip()
+            )
+
         elif key == "any":
             ok = True
-        elif key.startswith("contains:"):
-            terms = key.split(":",1)[1].split("|")
-            ok = any(normalize_text_no_diacritics(t) in ppt_text for t in terms)
+
         else:
-            words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
-            ok = any(w for w in words if len(w) > 1 and w in ppt_text)
+            # fallback: so từ mô tả
+            words = re.findall(r"\w+", desc.lower())
+            ok = any(
+                no_accent_vn(w) in ppt_text_noaccent for w in words if len(w) > 1
+            )
 
         if ok:
-            total_awarded += diem
-            notes.append(f"✅ {desc} (+{diem})")
+            total_awarded += ori
+            notes.append(f"✅ {desc} (+{ori})")
         else:
             notes.append(f"❌ {desc} (+0)")
 
     total_awarded = round(total_awarded, 2)
     return total_awarded, notes
+
 
 # ---------------- Scratch grading ----------------
 def analyze_sb3_basic(file_path):
@@ -283,3 +310,4 @@ def grade_scratch(file_path, criteria):
             notes.append(f"❌ {desc} (+0)")
     total_awarded = round(total_awarded, 2)
     return total_awarded, notes
+
