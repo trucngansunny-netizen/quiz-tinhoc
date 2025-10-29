@@ -185,10 +185,28 @@ def grade_ppt(file_path, criteria):
         return False
 
     # ======== KIỂM TRA CÓ HÌNH ========
-    has_picture_any = any(
-        shape_has_picture(shape)
-        for slide in slides for shape in slide.shapes
-    )
+  # Kiểm tra có hình ảnh không (mở rộng tất cả kiểu)
+def shape_has_picture(shape):
+    try:
+        # Kiểm tra shape là ảnh
+        if shape.shape_type == 13:
+            return True
+        # Ảnh trong fill (dùng làm nền hoặc khung)
+        if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
+            return True
+        # Kiểm tra trong GroupShape
+        if hasattr(shape, "shapes"):
+            return any(shape_has_picture(s) for s in shape.shapes)
+    except Exception:
+        return False
+    return False
+
+has_picture_any = any(
+    shape_has_picture(shape)
+    for slide in slides
+    for shape in slide.shapes
+)
+
 
     has_transition_any = any("transition" in slide._element.xml for slide in slides)
 
@@ -336,5 +354,6 @@ def grade_scratch(file_path, criteria):
             notes.append(f"❌ {desc} (+0)")
     total_awarded = round(total_awarded, 2)
     return total_awarded, notes
+
 
 
