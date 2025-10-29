@@ -5,7 +5,6 @@ import tempfile
 import shutil
 import re
 import unicodedata
-
 from docx import Document
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -132,7 +131,7 @@ def grade_word(file_path, criteria):
     total_awarded = round(total_awarded, 2)
     return total_awarded, notes
 
-# ---------------- PowerPoint grading ----------------
+# ---------------- PPT grading ----------------
 def grade_ppt(file_path, criteria):
     try:
         prs = Presentation(file_path)
@@ -151,29 +150,33 @@ def grade_ppt(file_path, criteria):
     notes = []
     num_slides = len(slides)
 
-    def no_accent_vn(text):
-        """Bỏ dấu tiếng Việt để so sánh không phân biệt có dấu."""
-        return ''.join(
-            c for c in unicodedata.normalize('NFD', text)
-            if unicodedata.category(c) != 'Mn'
-        )
-
+    # === Hàm nhận dạng hình ảnh (mới, mạnh hơn) ===
     def shape_has_picture(shape):
-        """Nhận biết mọi loại hình ảnh (ảnh chèn, nhóm, nền, SmartArt)."""
+        """Nhận diện mọi loại hình ảnh trong PowerPoint, kể cả nền, nhóm, SmartArt."""
         try:
+            # Ảnh chèn trực tiếp
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 return True
+            # Ảnh trong nhóm
             if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
-                for s in shape.shapes:
-                    if shape_has_picture(s):
-                        return True
+                return any(shape_has_picture(s) for s in shape.shapes)
+            # Ảnh nền (fill type = 6)
             if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
                 return True
-            xml = getattr(shape, "_element", None)
-            if xml is not None:
-                xml_str = xml.xml.lower()
-                if any(tag in xml_str for tag in ["p:pic", "a:blip", "pic:pic", "blipfill"]):
+            # Ảnh trong SmartArt, Chart, Table
+            if shape.shape_type in (
+                MSO_SHAPE_TYPE.CHART,
+                MSO_SHAPE_TYPE.SMART_ART,
+                MSO_SHAPE_TYPE.TABLE,
+                MSO_SHAPE_TYPE.CANVAS,
+            ):
+                xml_str = shape._element.xml.lower()
+                if any(tag in xml_str for tag in ["p:pic", "a:blip", "blipfill", "a:blipfill"]):
                     return True
+            # Kiểm tra XML thô
+            xml_str = shape._element.xml.lower()
+            if any(tag in xml_str for tag in ["p:pic", "a:blip", "a:blipfill", "blipfill"]):
+                return True
         except Exception:
             pass
         return False
@@ -191,7 +194,7 @@ def grade_ppt(file_path, criteria):
         for shape in slide.shapes:
             if getattr(shape, "has_text_frame", False):
                 ppt_text += " " + (shape.text or "")
-    ppt_text_noaccent = no_accent_vn(ppt_text.lower())
+    ppt_text_noaccent = normalize_text_no_diacritics(ppt_text)
 
     for it in items:
         desc = it.get("mo_ta", "").strip()
@@ -212,12 +215,12 @@ def grade_ppt(file_path, criteria):
                 ok = any(shape.has_text_frame and shape.text.strip() for shape in first.shapes)
         elif key.startswith("contains:"):
             terms = key.split(":", 1)[1].split("|")
-            ok = any(no_accent_vn(t.strip().lower()) in ppt_text_noaccent for t in terms if t.strip())
+            ok = any(normalize_text_no_diacritics(t.strip()) in ppt_text_noaccent for t in terms if t.strip())
         elif key == "any":
             ok = True
         else:
-            words = re.findall(r"\w+", desc.lower())
-            ok = any(no_accent_vn(w) in ppt_text_noaccent for w in words if len(w) > 1)
+            words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
+            ok = any(w in ppt_text_noaccent for w in words if len(w) > 1)
 
         if ok:
             total_awarded += ori
@@ -255,7 +258,7 @@ def analyze_sb3_basic(file_path):
             if "variables" in t and len(t.get("variables", [])) > 0:
                 flags["has_variable"] = True
             blocks = t.get("blocks", {})
-            for _, block in blocks.items():
+            for block_id, block in blocks.items():
                 opcode = block.get("opcode", "").lower()
                 if any(k in opcode for k in ["control_repeat","control_forever","control_repeat_until"]):
                     flags["has_loop"] = True
@@ -298,17 +301,4 @@ def grade_scratch(file_path, criteria):
         elif key == "has_interaction":
             ok = flags.get("has_interaction", False)
         elif key == "has_variable":
-            ok = flags.get("has_variable", False)
-        elif key == "multiple_sprites_or_animation":
-            ok = flags.get("multiple_sprites_or_animation", False)
-        elif key == "any":
-            ok = True
-        else:
-            ok = any(k in desc.lower() for k in ["vòng", "lặp", "biến", "phát sóng", "điều kiện", "nối"])
-        if ok:
-            total_awarded += diem
-            notes.append(f"✅ {desc} (+{diem})")
-        else:
-            notes.append(f"❌ {desc} (+0)")
-    total_awarded = round(total_awarded, 2)
-    return total_awarded, notes
+            ok = f
