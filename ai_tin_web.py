@@ -1,15 +1,13 @@
-# ai_tin_web.py — Flask WSGI app (gunicorn ai_tin_web:app)
 import os
 import json
 import shutil
 import tempfile
 import datetime
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash
+from flask import Flask, render_template, request, send_from_directory, flash
 from werkzeug.utils import secure_filename
 from openpyxl import Workbook, load_workbook
 
-# Import hàm chấm của cô (giữ nguyên file cham_tieuchi.py mà cô đã có)
-# cham_tieuchi.py phải nằm cùng thư mục với ai_tin_web.py
+# ---- Import từ file chấm ----
 from cham_tieuchi import (
     pretty_name_from_filename,
     load_criteria,
@@ -24,54 +22,53 @@ STATIC_DIR = os.path.join(APP_ROOT, "static")
 CRITERIA_DIR = os.path.join(APP_ROOT, "criteria")
 RESULTS_DIR = os.path.join(APP_ROOT, "results")
 TONGHOP_FILE = os.path.join(RESULTS_DIR, "tonghop.xlsx")
-VISIT_FILE = os.path.join(RESULTS_DIR, "visits.txt")
+VISIT_FILE = os.path.join(RESULTS_DIR, "visit_count.txt")
 ALLOWED_EXT = {"pptx", "docx", "sb3", "zip"}
 
-# Danh sách 14 lớp
+# Các lớp trong trường
 CLASSES = [
-    "3A1","3A2","3A3","3A4",
-    "4A1","4A2","4A3","4A4","4A5",
-    "5A1","5A2","5A3","5A4","5A5"
+    "3A1", "3A2", "3A3", "3A4",
+    "4A1", "4A2", "4A3", "4A4", "4A5",
+    "5A1", "5A2", "5A3", "5A4", "5A5"
 ]
 
-# Môn hợp lệ theo khối
 AVAILABLE_BY_GRADE = {
     3: ["PowerPoint"],
     4: ["Word", "PowerPoint", "Scratch"],
     5: ["Word", "Scratch"]
 }
 
-# Tạo các thư mục cần thiết
+# Tạo thư mục nếu chưa có
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(CRITERIA_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # ---------------- Flask app ----------------
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.secret_key = "ai_tin_secret_key_replace_if_needed"  # chỉ để flash message
+app.secret_key = "ai_tin_secret_key_replace_if_needed"
 
 # ---------------- Utilities ----------------
 def allowed_file(filename):
     ext = filename.rsplit(".", 1)[-1].lower()
     return ext in ALLOWED_EXT
 
+
 def increase_visit():
+    """Tăng lượt truy cập và lưu vào file"""
     try:
-        if not os.path.exists(RESULTS_DIR):
-            os.makedirs(RESULTS_DIR, exist_ok=True)
         if not os.path.exists(VISIT_FILE):
             with open(VISIT_FILE, "w", encoding="utf-8") as f:
                 f.write("0")
         with open(VISIT_FILE, "r+", encoding="utf-8") as f:
-            try:
-                c = int(f.read().strip() or "0")
-            except:
-                c = 0
+            c = int(f.read().strip() or "0")
             c += 1
-            f.seek(0); f.write(str(c)); f.truncate()
+            f.seek(0)
+            f.write(str(c))
+            f.truncate()
         return c
     except Exception:
-        return None
+        return 0
+
 
 def read_visit():
     try:
@@ -82,145 +79,138 @@ def read_visit():
     except:
         return 0
 
+
 def ensure_tonghop():
+    """Tạo file tổng hợp nếu chưa có"""
     if not os.path.exists(TONGHOP_FILE):
         wb = Workbook()
-        if "Sheet" in wb.sheetnames and len(wb.sheetnames) == 1:
-            ws = wb.active
-            ws.title = CLASSES[0]
-            ws.append(["Họ và tên","Lớp","Khối","Môn học","Tên tệp","Điểm tổng","Ngày chấm","Nhận xét","Tiêu chí chi tiết"])
-            for cls in CLASSES[1:]:
-                ws2 = wb.create_sheet(title=cls)
-                ws2.append(["Họ và tên","Lớp","Khối","Môn học","Tên tệp","Điểm tổng","Ngày chấm","Nhận xét","Tiêu chí chi tiết"])
-        else:
-            for cls in CLASSES:
-                if cls not in wb.sheetnames:
-                    ws = wb.create_sheet(title=cls)
-                    ws.append(["Họ và tên","Lớp","Khối","Môn học","Tên tệp","Điểm tổng","Ngày chấm","Nhận xét","Tiêu chí chi tiết"])
+        ws = wb.active
+        ws.title = CLASSES[0]
+        ws.append([
+            "Họ và tên", "Lớp", "Khối", "Môn học",
+            "Tên tệp", "Điểm", "Ngày chấm", "Nhận xét", "Chi tiết"
+        ])
+        for cls in CLASSES[1:]:
+            w = wb.create_sheet(title=cls)
+            w.append([
+                "Họ và tên", "Lớp", "Khối", "Môn học",
+                "Tên tệp", "Điểm", "Ngày chấm", "Nhận xét", "Chi tiết"
+            ])
         wb.save(TONGHOP_FILE)
 
-def append_result(class_name, grade, student_name, subject, filename, total, remark, crit_summary):
+
+def append_result(class_name, grade, student_name, subject, filename, total, remark, notes):
+    """Ghi kết quả vào Excel"""
     ensure_tonghop()
     wb = load_workbook(TONGHOP_FILE)
     if class_name not in wb.sheetnames:
         ws = wb.create_sheet(title=class_name)
-        ws.append(["Họ và tên","Lớp","Khối","Môn học","Tên tệp","Điểm tổng","Ngày chấm","Nhận xét","Tiêu chí chi tiết"])
+        ws.append([
+            "Họ và tên", "Lớp", "Khối", "Môn học",
+            "Tên tệp", "Điểm", "Ngày chấm", "Nhận xét", "Chi tiết"
+        ])
     ws = wb[class_name]
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ws.append([student_name, class_name, grade, subject, filename, float(total), now, remark, crit_summary])
+    now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+    ws.append([
+        student_name, class_name, grade, subject,
+        filename, total, now, remark, "; ".join(notes)
+    ])
     wb.save(TONGHOP_FILE)
 
-# ---------------- Routes ----------------
 
+# ---------------- Routes ----------------
 @app.route("/static/<path:filename>")
 def custom_static(filename):
     return send_from_directory(STATIC_DIR, filename)
 
+
 @app.route("/", methods=["GET", "POST"])
 def index():
-    visit_count = increase_visit() or read_visit()
-
+    visit_count = increase_visit()
     message = None
     result = None
-    criteria_list = None
-    selected_grade = None
-    selected_class = None
-    selected_subject = None
 
     if request.method == "POST":
-        selected_grade = request.form.get("grade")
-        selected_class = request.form.get("class")
-        selected_subject = request.form.get("subject")
+        grade = request.form.get("grade")
+        cls = request.form.get("class")
+        subject = request.form.get("subject")
         uploaded = request.files.get("file")
 
-        if not selected_grade or not selected_class or not selected_subject:
-            message = "Vui lòng chọn Khối, Lớp và Môn trước khi nộp."
+        if not grade or not cls or not subject:
+            message = "⚠️ Vui lòng chọn đầy đủ Khối, Lớp và Môn học."
         elif uploaded is None or uploaded.filename == "":
-            message = "Vui lòng chọn tệp để nộp."
+            message = "⚠️ Vui lòng chọn tệp để chấm."
         else:
-            try:
-                grade_num = int(selected_grade)
-            except:
-                message = "Khối không hợp lệ."
-                grade_num = None
-
-            if grade_num and selected_subject not in AVAILABLE_BY_GRADE.get(grade_num, []):
-                message = f"Khối {grade_num} không học môn {selected_subject}."
+            filename = secure_filename(uploaded.filename)
+            if not allowed_file(filename):
+                message = "⚠️ Chỉ hỗ trợ file: .docx, .pptx, .sb3, .zip"
             else:
-                filename = secure_filename(uploaded.filename)
-                if not allowed_file(filename):
-                    message = "Định dạng tệp không được hỗ trợ. Hỗ trợ: .docx .pptx .sb3 .zip"
+                tmp_dir = tempfile.mkdtemp(prefix="ai_tin_")
+                file_path = os.path.join(tmp_dir, filename)
+                uploaded.save(file_path)
+
+                # Nạp tiêu chí
+                try:
+                    criteria = load_criteria(subject, int(grade), CRITERIA_DIR)
+                except Exception as e:
+                    message = f"Lỗi đọc tiêu chí: {e}"
+                    criteria = None
+
+                if not criteria:
+                    message = f"⚠️ Chưa có tiêu chí cho {subject} khối {grade}."
                 else:
-                    tmp_dir = tempfile.mkdtemp(prefix="ai_tin_")
-                    tmp_path = os.path.join(tmp_dir, filename)
-                    uploaded.save(tmp_path)
-
                     try:
-                        criteria = load_criteria(selected_subject.lower(), int(selected_grade), CRITERIA_DIR)
-                    except TypeError:
-                        criteria = load_criteria(selected_subject.lower(), int(selected_grade))
-
-                    if not criteria:
-                        message = f"Chưa có tiêu chí cho {selected_subject} khối {selected_grade}."
-                        shutil.rmtree(tmp_dir, ignore_errors=True)
-                    else:
-                        total = None
-                        notes = []
-                        try:
-                            if selected_subject == "Word":
-                                total, notes = grade_word(tmp_path, criteria)
-                            elif selected_subject == "PowerPoint":
-                                total, notes = grade_ppt(tmp_path, criteria)
-                            elif selected_subject == "Scratch":
-                                total, notes = grade_scratch(tmp_path, criteria)
-                        except Exception as e:
-                            message = f"Lỗi khi chấm: {e}"
-                            notes = [str(e)]
-                            total = None
-
-                        if total is None:
-                            message = message or "Lỗi khi chấm bài (không nhận diện được nội dung)."
-                            shutil.rmtree(tmp_dir, ignore_errors=True)
+                        if subject.lower().startswith("word"):
+                            total, notes = grade_word(file_path, criteria)
+                        elif subject.lower().startswith("power"):
+                            total, notes = grade_ppt(file_path, criteria)
+                        elif subject.lower().startswith("scratch"):
+                            total, notes = grade_scratch(file_path, criteria)
                         else:
-                            crit_summary = "; ".join(notes)
-                            try:
-                                total_float = float(total)
-                            except:
-                                total_float = float(round(total, 2))
-                            if total_float >= 9.5:
-                                remark = "Hoàn thành xuất sắc"
-                            elif total_float >= 8.0:
-                                remark = "Hoàn thành tốt"
-                            elif total_float >= 6.5:
-                                remark = "Đạt yêu cầu"
-                            else:
-                                remark = "Cần cố gắng thêm"
+                            total, notes = None, ["Môn học không hợp lệ."]
+                    except Exception as e:
+                        total, notes = None, [f"Lỗi khi chấm: {e}"]
 
-                            append_result(selected_class, selected_grade, pretty_name_from_filename(filename),
-                                          selected_subject, filename, total_float, remark, crit_summary)
-                            shutil.rmtree(tmp_dir, ignore_errors=True)
+                    if total is not None:
+                        # Nhận xét tự động
+                        if total >= 9.5:
+                            remark = "Hoàn thành xuất sắc"
+                        elif total >= 8.0:
+                            remark = "Hoàn thành tốt"
+                        elif total >= 6.5:
+                            remark = "Đạt yêu cầu"
+                        else:
+                            remark = "Cần cố gắng thêm"
 
-                            result = {
-                                "student": pretty_name_from_filename(filename),
-                                "class": selected_class,
-                                "grade": selected_grade,
-                                "subject": selected_subject,
-                                "file": filename,
-                                "total": total_float,
-                                "remark": remark,
-                                "notes": notes
-                            }
+                        append_result(
+                            cls, grade, pretty_name_from_filename(filename),
+                            subject, filename, total, remark, notes
+                        )
 
-    # ✅ Ép key sang string để tránh lỗi Undefined / JSON serialize
-    avail_json_ready = {str(k): v for k, v in AVAILABLE_BY_GRADE.items()}
+                        result = {
+                            "student": pretty_name_from_filename(filename),
+                            "class": cls,
+                            "grade": grade,
+                            "subject": subject,
+                            "file": filename,
+                            "total": total,
+                            "remark": remark,
+                            "notes": notes
+                        }
+                    else:
+                        message = "⚠️ Không thể chấm bài. Kiểm tra lại file."
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    return render_template("index.html",
-                           classes=CLASSES,
-                           avail_by_grade=avail_json_ready,
-                           visit_count=read_visit(),
-                           result=result,
-                           message=message)
+    return render_template(
+        "index.html",
+        classes=CLASSES,
+        avail_by_grade=AVAILABLE_BY_GRADE,
+        visit_count=visit_count,
+        result=result,
+        message=message
+    )
 
-# ---------------- Run (for local debug only) ----------------
+
+# ---------------- Run local ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
