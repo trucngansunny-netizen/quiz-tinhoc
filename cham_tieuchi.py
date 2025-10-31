@@ -9,7 +9,8 @@ from docx import Document
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
-# ---------------- UTILITIES ----------------
+
+# ---------------- Utilities ----------------
 def normalize_text_no_diacritics(s):
     """Chuẩn hóa chuỗi: bỏ dấu tiếng Việt, đưa về chữ thường."""
     if not isinstance(s, str):
@@ -19,6 +20,7 @@ def normalize_text_no_diacritics(s):
     s = ''.join(ch for ch in s if unicodedata.category(ch) != 'Mn')
     return s
 
+
 def pretty_name_from_filename(filename):
     base = os.path.splitext(os.path.basename(filename))[0]
     s = base.replace("_", " ").replace("-", " ")
@@ -27,6 +29,7 @@ def pretty_name_from_filename(filename):
     parts = [p for p in s.split() if p.strip()]
     parts = [p.capitalize() for p in parts]
     return " ".join(parts)
+
 
 def find_criteria_file(subject_prefix, grade, criteria_folder="criteria"):
     patterns = [
@@ -49,6 +52,7 @@ def find_criteria_file(subject_prefix, grade, criteria_folder="criteria"):
             if fn.lower().startswith(subject_prefix.lower()) and str(grade) in lower and fn.lower().endswith(".json"):
                 return os.path.join(criteria_folder, fn)
     return None
+
 
 def load_criteria(subject, grade, criteria_folder="criteria"):
     if isinstance(grade, str) and grade.isdigit():
@@ -85,7 +89,8 @@ def load_criteria(subject, grade, criteria_folder="criteria"):
         return None
     return None
 
-# ---------------- WORD GRADING ----------------
+
+# ---------------- Word grading ----------------
 def grade_word(file_path, criteria):
     try:
         doc = Document(file_path)
@@ -109,18 +114,13 @@ def grade_word(file_path, criteria):
         elif key == "has_name":
             ok = any(k in text for k in ["ho ten", "ten hoc sinh", "ho va ten"])
         elif key == "has_image":
-            try:
-                inline_exists = bool(getattr(doc, "inline_shapes", None) and len(doc.inline_shapes) > 0)
-            except Exception:
-                inline_exists = False
-            ok = inline_exists or ("graphicdata" in normalize_text_no_diacritics("\n".join(p._element.xml for p in doc.paragraphs)))
+            ok = bool(doc.inline_shapes) or "graphicdata" in normalize_text_no_diacritics("\n".join(p._element.xml for p in doc.paragraphs))
         elif key == "format_text":
-            bold_text = any(run.bold for p in doc.paragraphs for run in p.runs if run.bold)
-            ok = bold_text
+            ok = any(run.bold for p in doc.paragraphs for run in p.runs if run.bold)
         elif key == "any":
             ok = True
         elif key.startswith("contains:"):
-            terms = key.split(":", 1)[1].split("|")
+            terms = key.split(":",1)[1].split("|")
             ok = any(normalize_text_no_diacritics(t) in text for t in terms)
         else:
             words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
@@ -134,7 +134,8 @@ def grade_word(file_path, criteria):
 
     return round(total_awarded, 2), notes
 
-# ---------------- POWERPOINT GRADING ----------------
+
+# ---------------- PowerPoint grading (mở rộng đầy đủ) ----------------
 def grade_ppt(file_path, criteria):
     try:
         prs = Presentation(file_path)
@@ -153,37 +154,44 @@ def grade_ppt(file_path, criteria):
     notes = []
     num_slides = len(slides)
 
+    def normalize_text(s):
+        if not isinstance(s, str):
+            return ""
+        s = s.lower()
+        s = unicodedata.normalize('NFD', s)
+        s = ''.join(ch for ch in s if unicodedata.category(ch) != 'Mn')
+        return s
+
     def shape_has_picture(shape):
-        """Nhận diện mọi loại hình ảnh: PNG, JPG, GIF, BMP, nền, nhóm, SmartArt, web ảnh."""
         try:
-            # Ảnh chèn trực tiếp
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 return True
-            # Ảnh nền
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                return any(shape_has_picture(s) for s in shape.shapes)
             if hasattr(shape, "fill") and getattr(shape.fill, "type", None) == 6:
                 return True
-            # Ảnh nhóm
-            if hasattr(shape, "shapes"):
-                for s in shape.shapes:
-                    if shape_has_picture(s):
-                        return True
-            # Ảnh trong SmartArt, Chart, Table
             xml_str = shape._element.xml.lower()
-            if any(tag in xml_str for tag in ["p:pic", "a:blip", "a:blipfill", "blipfill", ".jpg", ".png", ".jpeg", ".gif", ".bmp"]):
+            if any(tag in xml_str for tag in [
+                "p:pic", "a:blip", "a:blipfill", "r:embed", "xlink:href",
+                ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg",
+                ".ico", ".tif", ".tiff", ".heic"
+            ]) or "data:image/" in xml_str:
                 return True
         except Exception:
             pass
         return False
 
-    has_picture_any = any(shape_has_picture(shape) for slide in slides for shape in slide.shapes)
-    has_transition_any = any("transition" in slide._element.xml for slide in slides)
+    has_picture_any = any(
+        shape_has_picture(shape)
+        for slide in slides
+        for shape in slide.shapes
+    )
 
-    ppt_text = ""
-    for slide in slides:
-        for shape in slide.shapes:
-            if getattr(shape, "has_text_frame", False):
-                ppt_text += " " + (shape.text or "")
-    ppt_text_noaccent = normalize_text_no_diacritics(ppt_text)
+    has_transition_any = any("transition" in slide._element.xml for slide in slides)
+    ppt_text = " ".join(
+        shape.text for slide in slides for shape in slide.shapes if getattr(shape, "has_text_frame", False)
+    )
+    ppt_text_noaccent = normalize_text(ppt_text)
 
     for it in items:
         desc = it.get("mo_ta", "").strip()
@@ -200,16 +208,15 @@ def grade_ppt(file_path, criteria):
             ok = has_transition_any
         elif key == "title_first":
             if slides:
-                first = slides[0]
-                ok = any(shape.has_text_frame and shape.text.strip() for shape in first.shapes)
+                ok = any(shape.has_text_frame and shape.text.strip() for shape in slides[0].shapes)
         elif key.startswith("contains:"):
             terms = key.split(":", 1)[1].split("|")
-            ok = any(normalize_text_no_diacritics(t.strip()) in ppt_text_noaccent for t in terms if t.strip())
+            ok = any(normalize_text(t.strip()) in ppt_text_noaccent for t in terms if t.strip())
         elif key == "any":
             ok = True
         else:
-            words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
-            ok = any(w in ppt_text_noaccent for w in words if len(w) > 1)
+            words = re.findall(r"\w+", normalize_text(desc))
+            ok = any(w for w in words if len(w) > 1 and w in ppt_text_noaccent)
 
         if ok:
             total_awarded += ori
@@ -219,7 +226,8 @@ def grade_ppt(file_path, criteria):
 
     return round(total_awarded, 2), notes
 
-# ---------------- SCRATCH GRADING ----------------
+
+# ---------------- Scratch grading ----------------
 def analyze_sb3_basic(file_path):
     tempdir = None
     try:
@@ -245,17 +253,17 @@ def analyze_sb3_basic(file_path):
         for t in targets:
             if "variables" in t and len(t.get("variables", [])) > 0:
                 flags["has_variable"] = True
-            blocks = t.get("blocks", {})
-            for block_id, block in blocks.items():
+            for block in t.get("blocks", {}).values():
                 opcode = block.get("opcode", "").lower()
-                if any(k in opcode for k in ["control_repeat","control_forever","control_repeat_until"]):
+                if any(k in opcode for k in ["control_repeat", "control_forever", "control_repeat_until"]):
                     flags["has_loop"] = True
-                if any(k in opcode for k in ["control_if","control_if_else"]):
+                if any(k in opcode for k in ["control_if", "control_if_else"]):
                     flags["has_condition"] = True
-                if any(k in opcode for k in ["sensing_keypressed","sensing_touchingobject","event_whenthisspriteclicked",
-                                             "event_whenflagclicked","event_whenbroadcastreceived","sensing_mousedown"]):
+                if any(k in opcode for k in ["sensing_keypressed", "sensing_touchingobject",
+                                             "event_whenthisspriteclicked", "event_whenflagclicked",
+                                             "event_whenbroadcastreceived", "sensing_mousedown"]):
                     flags["has_interaction"] = True
-                if any(k in opcode for k in ["data_setvariableto","data_changevariableby","data_hidevariable","data_showvariable"]):
+                if any(k in opcode for k in ["data_setvariableto", "data_changevariableby"]):
                     flags["has_variable"] = True
                 if "event_broadcast" in opcode:
                     flags["has_interaction"] = True
@@ -265,6 +273,7 @@ def analyze_sb3_basic(file_path):
     finally:
         if tempdir and os.path.exists(tempdir):
             shutil.rmtree(tempdir, ignore_errors=True)
+
 
 def grade_scratch(file_path, criteria):
     flags, err = analyze_sb3_basic(file_path)
@@ -293,9 +302,11 @@ def grade_scratch(file_path, criteria):
             ok = True
         else:
             ok = any(k in desc.lower() for k in ["vòng", "lặp", "biến", "phát sóng", "điều kiện", "nối"])
+
         if ok:
             total_awarded += diem
             notes.append(f"✅ {desc} (+{diem})")
         else:
             notes.append(f"❌ {desc} (+0)")
+
     return round(total_awarded, 2), notes
