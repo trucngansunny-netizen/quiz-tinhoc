@@ -2,7 +2,7 @@ import os, json, zipfile, tempfile, shutil, re, unicodedata
 from docx import Document
 from pptx import Presentation
 
-# ========== UTILITIES ==========
+# ================= UTILITIES =================
 def normalize_text_no_diacritics(s):
     if not isinstance(s, str):
         return ""
@@ -39,7 +39,7 @@ def load_criteria(subject, grade, folder="criteria"):
     if isinstance(data, dict) and "tieu_chi" in data: return data
     return None
 
-# ========== WORD ==========
+# ================= WORD =================
 def grade_word(file_path, criteria):
     try:
         doc = Document(file_path)
@@ -54,9 +54,6 @@ def grade_word(file_path, criteria):
         ok = False
         if key == "has_image":
             ok = bool(doc.inline_shapes) or "a:blip" in "\n".join(p._element.xml for p in doc.paragraphs)
-        elif key.startswith("contains:"):
-            terms = key.split(":", 1)[1].split("|")
-            ok = any(normalize_text_no_diacritics(t) in text for t in terms)
         else:
             words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
             ok = any(w in text for w in words if len(w) > 1)
@@ -64,7 +61,7 @@ def grade_word(file_path, criteria):
         notes.append(f"{'✅' if ok else '❌'} {desc} (+{diem if ok else 0})")
     return round(total, 2), notes
 
-# ========== POWERPOINT ==========
+# ================= POWERPOINT =================
 def grade_ppt(file_path, criteria):
     try:
         prs = Presentation(file_path)
@@ -72,20 +69,30 @@ def grade_ppt(file_path, criteria):
     except Exception as e:
         return None, [f"Lỗi PowerPoint: {e}"]
 
-    # Cách CHẮC CHẮN NHẤT: mở file .pptx như zip và xem có ảnh trong ppt/media/
+    # ---- Cách phát hiện ảnh toàn diện ----
     has_picture_any = False
     try:
         with zipfile.ZipFile(file_path, 'r') as z:
-            image_exts = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tif', '.tiff',
-                          '.svg', '.webp', '.ico', '.emf', '.wmf', '.jfif', '.heic', '.avif')
             for name in z.namelist():
-                if name.lower().startswith("ppt/media/") and name.lower().endswith(image_exts):
+                low = name.lower()
+                if low.startswith("ppt/media/") and low.endswith((
+                    ".jpg",".jpeg",".png",".gif",".bmp",".tif",".tiff",
+                    ".svg",".webp",".ico",".emf",".wmf",".jfif",".heic",".avif"
+                )):
                     has_picture_any = True
                     break
+            # Nếu chưa có ảnh, quét XML tìm link ảnh Online (r:link / a:blip)
+            if not has_picture_any:
+                for name in z.namelist():
+                    if name.lower().startswith("ppt/slides/slide") and name.endswith(".xml"):
+                        xml = z.read(name).decode("utf-8", errors="ignore").lower()
+                        if any(tag in xml for tag in ["r:link=", "a:blip", "svgblip", "blipfill"]):
+                            has_picture_any = True
+                            break
     except Exception:
         has_picture_any = False
 
-    # Một số thông tin bổ sung để chấm khác
+    # ---- Các tiêu chí khác ----
     has_transition_any = any("transition" in slide._element.xml for slide in slides)
     num_slides = len(slides)
     ppt_text = " ".join(
@@ -99,26 +106,20 @@ def grade_ppt(file_path, criteria):
         key = (it.get("key") or "").lower()
         diem = float(it.get("diem", 0))
         ok = False
-
         if key == "has_image":
             ok = has_picture_any
         elif key == "min_slides":
             ok = num_slides >= int(it.get("value", 1))
         elif key == "has_transition":
             ok = has_transition_any
-        elif key.startswith("contains:"):
-            terms = key.split(":", 1)[1].split("|")
-            ok = any(normalize_text_no_diacritics(t) in ppt_text_noaccent for t in terms)
         else:
             words = re.findall(r"\w+", normalize_text_no_diacritics(desc))
             ok = any(w in ppt_text_noaccent for w in words if len(w) > 1)
-
         total += diem if ok else 0
         notes.append(f"{'✅' if ok else '❌'} {desc} (+{diem if ok else 0})")
-
     return round(total, 2), notes
 
-# ========== SCRATCH ==========
+# ================= SCRATCH =================
 def analyze_sb3_basic(file_path):
     tmp = tempfile.mkdtemp(prefix="sb3_")
     try:
