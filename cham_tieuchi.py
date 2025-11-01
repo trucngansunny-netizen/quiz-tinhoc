@@ -1,4 +1,23 @@
 # ---------------- PPT grading ----------------
+import os
+import json
+import zipfile
+import tempfile
+import shutil
+import re
+import unicodedata
+
+# ---------------- Utilities ----------------
+def pretty_name_from_filename(filename):
+    """Lấy tên gợi ý từ tên file (ví dụ: 'NguyenVanA_Lop4A1.pptx' -> 'Nguyen Van A Lop 4 A1')"""
+    base = os.path.splitext(os.path.basename(filename))[0]
+    s = base.replace("_", " ").replace("-", " ")
+    s = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', s)
+    s = re.sub(r'(\d+)', r' \1 ', s)
+    parts = [p for p in s.split() if p.strip()]
+    parts = [p.capitalize() for p in parts]
+    return " ".join(parts)
+
 def _shape_has_picture(shape):
     """Nhận diện toàn diện tất cả các loại ảnh trong PowerPoint."""
     try:
@@ -117,3 +136,4 @@ def grade_ppt(file_path, criteria):
             notes.append(f"❌ {desc} (+0)")
 
     return round(total, 2), notes
+
