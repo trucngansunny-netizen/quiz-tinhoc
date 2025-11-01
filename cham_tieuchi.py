@@ -6,10 +6,13 @@ import tempfile
 import shutil
 import re
 import unicodedata
+from docx import Document
+from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 # ---------------- Utilities ----------------
 def pretty_name_from_filename(filename):
-    """Lấy tên gợi ý từ tên file (ví dụ: 'NguyenVanA_Lop4A1.pptx' -> 'Nguyen Van A Lop 4 A1')"""
+    """Lấy tên gợi ý từ tên file (ví dụ: NguyenVanA_Lop4A1.pptx -> Nguyen Van A Lop 4 A1)"""
     base = os.path.splitext(os.path.basename(filename))[0]
     s = base.replace("_", " ").replace("-", " ")
     s = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', s)
@@ -17,6 +20,41 @@ def pretty_name_from_filename(filename):
     parts = [p for p in s.split() if p.strip()]
     parts = [p.capitalize() for p in parts]
     return " ".join(parts)
+
+
+def load_criteria(subject, grade, criteria_folder="criteria"):
+    """Tải file tiêu chí chấm điểm theo phần mềm và khối"""
+    if isinstance(grade, str) and grade.isdigit():
+        grade = int(grade)
+    s = subject.lower()
+    if s in ("powerpoint", "ppt", "pptx"):
+        pref = "ppt"
+    elif s in ("word", "docx", "doc"):
+        pref = "word"
+    elif s in ("scratch", "sb3"):
+        pref = "scratch"
+    else:
+        pref = s
+
+    # Tìm file tiêu chí
+    possible_names = [
+        f"{pref}{grade}.json",
+        f"{pref}_khoi{grade}.json",
+        f"{pref}-khoi{grade}.json"
+    ]
+    for name in possible_names:
+        path = os.path.join(criteria_folder, name)
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and "tieu_chi" in data:
+                    return data
+                elif isinstance(data, list):
+                    return {"tieu_chi": data}
+            except Exception:
+                pass
+    return None
 
 def _shape_has_picture(shape):
     """Nhận diện toàn diện tất cả các loại ảnh trong PowerPoint."""
@@ -136,4 +174,5 @@ def grade_ppt(file_path, criteria):
             notes.append(f"❌ {desc} (+0)")
 
     return round(total, 2), notes
+
 
