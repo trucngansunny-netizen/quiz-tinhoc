@@ -168,3 +168,59 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
+
+# === Added by ChatGPT ===
+import openpyxl
+from openpyxl import Workbook
+from datetime import datetime
+
+def save_to_excel(class_name, student_name, results):
+    file_path = "results/ket_qua_tong_hop.xlsx"
+    import os
+    if not os.path.exists("results"):
+        os.makedirs("results")
+    if not os.path.exists(file_path):
+        wb = Workbook()
+        wb.remove(wb.active)
+        wb.save(file_path)
+    wb = openpyxl.load_workbook(file_path)
+    if class_name not in wb.sheetnames:
+        sheet = wb.create_sheet(title=class_name)
+        sheet.append([
+            "Thời gian","Họ tên","Lớp",
+            "Tổng điểm","Điểm A","Điểm B","Điểm C","Điểm D",
+            "Lỗi A","Lỗi B","Lỗi C","Lỗi D"
+        ])
+    else:
+        sheet = wb[class_name]
+
+    sheet.append([
+        datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        student_name,
+        class_name,
+        results.get("total",0),
+        results["A"]["score"],
+        results["B"]["score"],
+        results["C"]["score"],
+        results["D"]["score"],
+        results["A"]["errors"],
+        results["B"]["errors"],
+        results["C"]["errors"],
+        results["D"]["errors"],
+    ])
+    wb.save(file_path)
+
+def count_view():
+    import os
+    if not os.path.exists("stats"):
+        os.makedirs("stats")
+    path="stats/views.txt"
+    if not os.path.exists(path):
+        with open(path,"w") as f: f.write("0")
+    with open(path) as f: v=int(f.read().strip())
+    v+=1
+    with open(path,"w") as f: f.write(str(v))
+    return v
+# === End Added ===
+
