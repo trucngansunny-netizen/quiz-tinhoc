@@ -4,7 +4,7 @@ import json
 import shutil
 import tempfile
 import datetime
-from flask import Flask, render_template, request, send_from_directory, send_file, abort, redirect, url_for
+from flask import Flask, render_template, request, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 from openpyxl import Workbook, load_workbook
 
@@ -38,13 +38,14 @@ CLASSES = [
     "5A1","5A2","5A3","5A4","5A5"
 ]
 
+# Môn hợp lệ theo khối
 AVAILABLE_BY_GRADE = {
     3: ["PowerPoint"],
     4: ["Word", "PowerPoint", "Scratch"],
     5: ["Word", "Scratch"]
 }
 
-# Tạo thư mục cần thiết
+# Tạo thư mục cần thiết nếu chưa có
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(CRITERIA_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -62,16 +63,17 @@ def read_visit():
         return 0
 
 def increase_visit():
+    # tăng +1 và ghi lại (khi GET trang)
     c = read_visit() + 1
     with open(VISIT_FILE, "w", encoding="utf-8") as f:
         f.write(str(c))
     return c
 
-# === TẠO/ GHI EXCEL TỔNG HỢP ===
+# === TỔNG HỢP EXCEL (1 sheet / 1 lớp) ===
 def ensure_tonghop():
     if not os.path.exists(TONGHOP_FILE):
         wb = Workbook()
-        # remove default sheet if present
+        # loại sheet mặc định "Sheet" nếu có
         if "Sheet" in wb.sheetnames:
             wb.remove(wb["Sheet"])
         for cls in CLASSES:
@@ -90,7 +92,7 @@ def append_result(class_name, grade, student_name, subject, filename, total):
     ws.append([student_name, class_name, grade, subject, filename, float(total), now])
     wb.save(TONGHOP_FILE)
 
-# === LƯU CHI TIẾT (mỗi lần 1 hàng JSON ghi vào ô) ===
+# === EXCEL CHI TIẾT (ghi JSON notes vào ô) ===
 def ensure_details():
     if not os.path.exists(DETAILS_FILE):
         wb = Workbook()
@@ -124,10 +126,17 @@ def allowed_file(filename):
 def custom_static(filename):
     return send_from_directory(STATIC_DIR, filename)
 
+# Helper: map tên môn hiển thị -> prefix file tiêu chí mà cham_tieuchi tìm (ppt/word/scratch)
+SUBJECT_TO_PREFIX = {
+    "Word": "word",
+    "PowerPoint": "ppt",
+    "Scratch": "scratch"
+}
+
 # === TRANG CHÍNH (Nộp & Chấm) ===
 @app.route("/", methods=["GET", "POST"])
 def index():
-    # Tăng lượt truy cập chỉ khi GET (mở trang)
+    # Tăng lượt truy cập chỉ khi GET
     if request.method == "GET":
         increase_visit()
 
@@ -145,6 +154,7 @@ def index():
         elif not uploaded or uploaded.filename == "":
             message = "Vui lòng chọn tệp để nộp."
         else:
+            # kiểm tra khối hợp lệ
             try:
                 grade_num = int(selected_grade)
             except:
@@ -162,8 +172,11 @@ def index():
                     tmp_path = os.path.join(tmp_dir, filename)
                     uploaded.save(tmp_path)
 
-                    # Load criteria (từ folder criteria)
-                    criteria = load_criteria(selected_subject.lower(), int(selected_grade), CRITERIA_DIR)
+                    # Map subject -> prefix (word/ppt/scratch) để cham_tieuchi.load_criteria tìm file đúng
+                    subj_prefix = SUBJECT_TO_PREFIX.get(selected_subject, selected_subject.lower())
+
+                    # LOAD TIÊU CHÍ
+                    criteria = load_criteria(subj_prefix, int(selected_grade), CRITERIA_DIR)
                     if not criteria:
                         message = f"Chưa có tiêu chí cho {selected_subject} khối {selected_grade}."
                         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -171,6 +184,7 @@ def index():
                         notes = []
                         total = None
                         try:
+                            # gọi hàm chấm tương ứng - các hàm trong cham_tieuchi.py (do bạn cung cấp) trả về (total, notes)
                             if selected_subject == "Word":
                                 total, notes = grade_word(tmp_path, criteria)
                             elif selected_subject == "PowerPoint":
@@ -181,6 +195,16 @@ def index():
                             message = f"Lỗi khi chấm: {e}"
                             notes = [str(e)]
                             total = None
+
+                        # Nếu grader của bạn chỉ trả về tổng (và notes rỗng), xây notes mặc định từ tiêu chí
+                        if total is not None and (not notes):
+                            # dùng tiêu chí để tạo danh sách ✅/❌ tạm thời dựa trên tổng (không chuẩn xác)
+                            # Tuy nhiên thường cham_tieuchi.py của cô đã trả notes chi tiết — nếu không, ta hiển thị chỉ tiêu.
+                            notes = []
+                            for it in criteria.get("tieu_chi", []):
+                                mo_ta = it.get("mo_ta", "")
+                                diem = it.get("diem", 0)
+                                notes.append(f"- {mo_ta} ({diem}đ)")
 
                         if total is not None:
                             student_name = pretty_name_from_filename(filename)
@@ -206,16 +230,8 @@ def index():
                                 notes
                             )
 
-                            # TRẢ KẾT QUẢ CHO HỌC SINH (nhưng không cho tải file tổng)
-                            # Nếu notes rỗng, hiển thị tiêu chí (nếu có) nhưng kèm chú thích
-                            if not notes:
-                                # build default note list from criteria (chỉ mô tả, không đánh ✅/❌)
-                                notes = []
-                                for it in criteria.get("tieu_chi", []):
-                                    notes.append(f"- {it.get('mo_ta', '')}")
-
-                                notes.append("Lưu ý: Hệ thống chưa cung cấp đánh giá chi tiết; giáo viên sẽ xem lại nếu cần.")
-
+                            # TRẢ KẾT QUẢ CHO HỌC SINH
+                            # result keys phải khớp template index.html: result.student, result.class, result.subject, result.total, result.remark, result.notes
                             result = {
                                 "student": student_name,
                                 "class": selected_class,
@@ -223,7 +239,8 @@ def index():
                                 "subject": selected_subject,
                                 "file": filename,
                                 "total": total,
-                                "details": notes
+                                "remark": "Đã nộp thành công",
+                                "notes": notes
                             }
                         else:
                             message = message or "Lỗi khi chấm bài."
@@ -244,7 +261,6 @@ def index():
 # === ROUTE BẢO MẬT CHO GIÁO VIÊN TẢI FILE TỔNG HỢP ===
 @app.route("/download-tonghop", methods=["GET", "POST"])
 def download_tonghop():
-    # GET: show a simple password form (template must exist or we render small html here)
     if request.method == "GET":
         return """
         <html><body>
@@ -264,7 +280,6 @@ def download_tonghop():
     if not os.path.exists(TONGHOP_FILE):
         return "<h3>Chưa có file tổng hợp nào.</h3><p><a href='/'>Quay về</a></p>", 404
 
-    # send file as attachment
     return send_file(TONGHOP_FILE, as_attachment=True, download_name=os.path.basename(TONGHOP_FILE))
 
 # === Route để xem file chi tiết (giáo viên) nếu cần ===
@@ -293,5 +308,4 @@ def download_details():
 
 # === RUN ===
 if __name__ == "__main__":
-    # app.run debug False for production; gunicorn will run it under Procfile
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
