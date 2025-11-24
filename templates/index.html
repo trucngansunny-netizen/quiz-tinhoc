@@ -1,3 +1,4 @@
+<!-- templates/index.html -->
 <!doctype html>
 <html lang="vi">
 <head>
@@ -24,6 +25,8 @@
     .footer { text-align:right; margin-top:12px; color:#64748b; font-size:13px; }
     .visitbox { position: fixed; right: 12px; bottom: 12px; background: rgba(255,255,255,0.9); padding:8px 10px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.08); font-size:13px; color:#334155; }
     .logo { height:54px; float:left; margin-right:12px; }
+    ul.criteria { margin:8px 0 0 18px; }
+    ul.criteria li { margin:6px 0; }
   </style>
 </head>
 <body>
@@ -88,35 +91,23 @@
     {% if result %}
       <div class="result" style="margin-top:14px;">
         <div><span class="success">✅ Bài đã chấm xong!</span></div>
-
         <div style="margin-top:8px;">
-          <strong>Họ tên:</strong> {{ result.student }}
-          &nbsp;&nbsp; <strong>Lớp:</strong> {{ result.class }}
-          &nbsp;&nbsp; <strong>Môn:</strong> {{ result.subject }}
+          <strong>Họ tên:</strong> {{ result.student }} &nbsp;&nbsp;
+          <strong>Lớp:</strong> {{ result.class }} &nbsp;&nbsp;
+          <strong>Môn:</strong> {{ result.subject }}
         </div>
-
         <div style="margin-top:6px;">
-          <strong>Điểm:</strong> {{ result.total }} / 10
+          <strong>Điểm:</strong> {{ result.total }}  &nbsp;&nbsp;
+          <strong>Ghi chú:</strong> (Hệ thống hiện chỉ hiển thị ✅/❌ cho từng tiêu chí)
         </div>
 
         <hr style="margin:8px 0; border:none; border-top:1px solid #e6eef8;">
-
         <div style="font-size:14px;"><strong>Chi tiết tiêu chí:</strong></div>
-
-        <ul>
-          {# HIỂN THỊ ĐẦY ĐỦ NỘI DUNG TIÊU CHÍ + ĐÚNG/SAI #}
-          {% for item in result.criteria_details %}
-            <li>
-              <strong>{{ item.text }}</strong> — 
-              {% if item.ok %}
-                <span style="color:#0b8537; font-weight:600;">Đúng ( +{{ item.score }} )</span>
-              {% else %}
-                <span style="color:#c53030; font-weight:600;">Sai ( +0 )</span>
-              {% endif %}
-            </li>
+        <ul class="criteria">
+          {% for line in result.notes %}
+            <li>{{ line }}</li>
           {% endfor %}
         </ul>
-
       </div>
     {% endif %}
 
@@ -130,14 +121,12 @@
     function onGradeChange(){
       const g = document.getElementById('grade').value;
       const subj = document.getElementById('subject');
-
+      // reset
       for (let i=0; i<subj.options.length; i++){
         subj.options[i].style.display = 'block';
         subj.options[i].disabled = false;
       }
-
       if (!g) return;
-
       const allowed = avail[g] || [];
       for (let i=0; i<subj.options.length; i++){
         const val = subj.options[i].value;
@@ -146,13 +135,13 @@
           subj.options[i].disabled = true;
         }
       }
-
+      // auto-select first allowed
       for (let i=0; i<subj.options.length; i++){
         if (!subj.options[i].disabled && subj.options[i].value){
           subj.selectedIndex = i; break;
         }
       }
-
+      // change background
       let bg = "/static/bg_default.jpg";
       if (g === "3") bg = "/static/bg_3.jpg";
       if (g === "4") bg = "/static/bg_4.jpg";
