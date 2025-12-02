@@ -1,71 +1,274 @@
 # ai_tin_web.py
 import os
-from flask import Flask, render_template, request
-from datetime import datetime
-from cham_tieuchi import load_criteria, grade_word, grade_ppt, grade_scratch
+import json
+import shutil
+import tempfile
+import datetime
+from flask import Flask, render_template, request, send_from_directory, send_file
+from werkzeug.utils import secure_filename
+from openpyxl import Workbook, load_workbook
 
-app = Flask(__name__)
+# Import module chấm tiêu chí (giữ nguyên tên file của cô)
+from cham_tieuchi import (
+    pretty_name_from_filename,
+    load_criteria,
+    grade_word,
+    grade_ppt,
+    grade_scratch
+)
 
-COUNTER_FILE = "counter.txt"
+# === CẤU HÌNH ===
+APP_ROOT = os.path.dirname(__file__)
+STATIC_DIR = os.path.join(APP_ROOT, "static")
+CRITERIA_DIR = os.path.join(APP_ROOT, "criteria")
+RESULTS_DIR = os.path.join(APP_ROOT, "results")
+TONGHOP_FILE = os.path.join(RESULTS_DIR, "tonghop.xlsx")   # sẽ tạo khi giáo viên tải xuống
+DETAILS_FILE = os.path.join(RESULTS_DIR, "details.xlsx")   # lưu mọi nộp bài
+VISIT_FILE = os.path.join(RESULTS_DIR, "visits.txt")
 
-def increase_counter():
-    if not os.path.exists(COUNTER_FILE):
-        with open(COUNTER_FILE,"w",encoding="utf-8") as f: f.write("0")
-    with open(COUNTER_FILE,"r+",encoding="utf-8") as f:
-        num = int(f.read().strip() or 0)
-        num += 1
-        f.seek(0)
-        f.write(str(num))
-    return num
+TEACHER_PASSWORD = "giaovien123"
 
-def save_student_file(file, subject, lop):
-    today = datetime.now().strftime("%Y-%m-%d")
-    folder = os.path.join("uploads", lop, subject, today)
-    os.makedirs(folder, exist_ok=True)
-    save_path = os.path.join(folder, file.filename)
-    file.save(save_path)
-    return save_path
+ALLOWED_EXT = {"pptx", "docx", "sb3", "zip"}
 
-def cham_file(path, subject, grade):
-    criteria = load_criteria(subject, grade)
-    if not criteria:
-        return None, ["Không tìm thấy tiêu chí chấm"]
+CLASSES = [
+    "3A1","3A2","3A3","3A4",
+    "4A1","4A2","4A3","4A4","4A5",
+    "5A1","5A2","5A3","5A4","5A5"
+]
 
-    if subject.lower() == "word":
-        return grade_word(path, criteria)
-    elif subject.lower() == "ppt":
-        return grade_ppt(path, criteria)
-    elif subject.lower() == "scratch":
-        return grade_scratch(path, criteria)
-    return None, ["Môn không hợp lệ"]
+AVAILABLE_BY_GRADE = {
+    3: ["PowerPoint"],
+    4: ["Word", "PowerPoint", "Scratch"],
+    5: ["Word", "Scratch"]
+}
 
-@app.route("/")
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(CRITERIA_DIR, exist_ok=True)
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.secret_key = os.environ.get("FLASK_SECRET", "change_this_secret_in_prod")
+
+# === LƯỢT TRUY CẬP ===
+def read_visit():
+    try:
+        if not os.path.exists(VISIT_FILE):
+            return 0
+        return int(open(VISIT_FILE, "r", encoding="utf-8").read().strip() or "0")
+    except Exception:
+        return 0
+
+def increase_visit():
+    c = read_visit() + 1
+    with open(VISIT_FILE, "w", encoding="utf-8") as f:
+        f.write(str(c))
+    return c
+
+# === CHỨC NĂNG LƯU DETAILS (mỗi lần 1 dòng trong sheet ChiTiet) ===
+def ensure_details():
+    if not os.path.exists(DETAILS_FILE):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "ChiTiet"
+        ws.append(["Thời gian", "Họ tên", "Lớp", "Khối", "Môn", "Tên tệp", "Tổng điểm", "Chi tiết(JSON)"])
+        wb.save(DETAILS_FILE)
+
+def save_detail_excel(student_name, class_name, grade, subject, filename, total, notes):
+    ensure_details()
+    wb = load_workbook(DETAILS_FILE)
+    ws = wb["ChiTiet"]
+    ws.append([
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        student_name,
+        class_name,
+        grade,
+        subject,
+        filename,
+        float(total),
+        json.dumps(notes, ensure_ascii=False)
+    ])
+    wb.save(DETAILS_FILE)
+
+# === TẠO FILE TONGHOP TỪ DETAILS (khi giáo viên yêu cầu tải) ===
+def build_tonghop_from_details():
+    # if no details -> empty file
+    ensure_details()
+    wb_details = load_workbook(DETAILS_FILE)
+    ws = wb_details["ChiTiet"]
+    # create new tonghop workbook
+    wb = Workbook()
+    # remove default
+    if "Sheet" in wb.sheetnames:
+        wb.remove(wb["Sheet"])
+    # create sheets for all classes
+    for cls in CLASSES:
+        sh = wb.create_sheet(title=cls)
+        sh.append(["Thời gian", "Họ tên", "Lớp", "Khối", "Môn", "Tên tệp", "Tổng điểm", "Chi tiết(JSON)"])
+    # iterate details rows
+    for row in list(ws.iter_rows(min_row=2, values_only=True)):
+        if not row: continue
+        time, name, class_name, grade, subject, filename, total, notes_json = row
+        if class_name not in wb.sheetnames:
+            ws_sheet = wb.create_sheet(title=class_name)
+            ws_sheet.append(["Thời gian", "Họ tên", "Lớp", "Khối", "Môn", "Tên tệp", "Tổng điểm", "Chi tiết(JSON)"])
+        ws_sheet = wb[class_name]
+        ws_sheet.append([time, name, class_name, grade, subject, filename, total, notes_json])
+    # save
+    wb.save(TONGHOP_FILE)
+    return TONGHOP_FILE
+
+# === HỖ TRỢ KIỂM TRA FILE ===
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
+
+@app.route("/static/<path:filename>")
+def custom_static(filename):
+    return send_from_directory(STATIC_DIR, filename)
+
+# === TRANG CHÍNH (Nộp & Chấm) ===
+@app.route("/", methods=["GET", "POST"])
 def index():
-    return render_template("index.html")
+    # tăng lượt truy cập chỉ khi GET
+    if request.method == "GET":
+        increase_visit()
 
-@app.route("/grade", methods=["POST"])
-def grade():
-    file = request.files["file"]
-    subject = request.form.get("subject")
-    lop = request.form.get("lop")
-    grade = request.form.get("grade")
+    message = None
+    result = None
 
-    # lưu file
-    saved_path = save_student_file(file, subject, lop)
+    if request.method == "POST":
+        selected_grade = request.form.get("grade")
+        selected_class = request.form.get("class")
+        selected_subject = request.form.get("subject")
+        uploaded = request.files.get("file")
 
-    # tăng bộ đếm
-    count = increase_counter()
+        if not (selected_grade and selected_class and selected_subject):
+            message = "Vui lòng chọn Khối, Lớp và Môn."
+        elif not uploaded or uploaded.filename == "":
+            message = "Vui lòng chọn tệp để nộp."
+        else:
+            try:
+                grade_num = int(selected_grade)
+            except:
+                message = "Khối không hợp lệ."
+                grade_num = None
 
-    # chấm bài
-    score, errors = cham_file(saved_path, subject, grade)
+            if grade_num and selected_subject not in AVAILABLE_BY_GRADE.get(grade_num, []):
+                message = f"Khối {grade_num} không học môn {selected_subject}."
+            else:
+                filename = secure_filename(uploaded.filename)
+                if not allowed_file(filename):
+                    message = "Chỉ hỗ trợ .docx, .pptx, .sb3, .zip"
+                else:
+                    tmp_dir = tempfile.mkdtemp(prefix="ai_tin_")
+                    tmp_path = os.path.join(tmp_dir, filename)
+                    uploaded.save(tmp_path)
+
+                    # load criteria
+                    criteria = load_criteria(selected_subject.lower(), int(selected_grade), CRITERIA_DIR)
+                    if not criteria:
+                        message = f"Chưa có tiêu chí cho {selected_subject} khối {selected_grade}."
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+                    else:
+                        notes = []
+                        total = None
+                        try:
+                            if selected_subject == "Word":
+                                total, notes = grade_word(tmp_path, criteria)
+                            elif selected_subject == "PowerPoint":
+                                total, notes = grade_ppt(tmp_path, criteria)
+                            elif selected_subject == "Scratch":
+                                total, notes = grade_scratch(tmp_path, criteria)
+                        except Exception as e:
+                            message = f"Lỗi khi chấm: {e}"
+                            notes = [str(e)]
+                            total = None
+
+                        if total is not None:
+                            student_name = pretty_name_from_filename(filename)
+
+                            # LƯU CHI TIẾT (mỗi lần học sinh nộp) — dùng DETAILS_FILE
+                            save_detail_excel(
+                                student_name,
+                                selected_class,
+                                selected_grade,
+                                selected_subject,
+                                filename,
+                                total,
+                                notes
+                            )
+
+                            # TRẢ KẾT QUẢ CHO HỌC SINH (hiển thị chi tiết tiêu chí ✅/❌)
+                            result = {
+                                "student": student_name,
+                                "class": selected_class,
+                                "grade": selected_grade,
+                                "subject": selected_subject,
+                                "file": filename,
+                                "total": total,
+                                "details": notes
+                            }
+                        else:
+                            message = message or "Lỗi khi chấm bài."
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    avail_by_grade = {str(k): v for k, v in AVAILABLE_BY_GRADE.items()}
 
     return render_template(
         "index.html",
-        score=score,
-        errors=errors,
-        count=count,
-        filename=file.filename
+        classes=CLASSES,
+        avail_by_grade=avail_by_grade,
+        visit_count=read_visit(),
+        result=result,
+        message=message
     )
 
+# === ROUTE BẢO MẬT CHO GIÁO VIÊN TẢI FILE TỔNG HỢP ===
+@app.route("/download-tonghop", methods=["GET", "POST"])
+def download_tonghop():
+    if request.method == "GET":
+        return """
+        <html><body>
+        <h3>Download file tổng hợp (giáo viên)</h3>
+        <form method="post">
+          Mật khẩu: <input name="pw" type="password"/>
+          <button type="submit">Tải về</button>
+        </form>
+        <p><a href="/">Quay về trang nộp bài</a></p>
+        </body></html>
+        """
+    pw = request.form.get("pw", "")
+    if pw != TEACHER_PASSWORD:
+        return "<h3>Mật khẩu sai.</h3><p><a href='/download-tonghop'>Thử lại</a></p>", 401
+
+    # build tonghop from details (on-demand)
+    if not os.path.exists(DETAILS_FILE):
+        return "<h3>Chưa có dữ liệu nộp bài nào.</h3><p><a href='/'>Quay về</a></p>", 404
+
+    path = build_tonghop_from_details()
+    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+
+# === ROUTE TẢI FILE CHI TIẾT (GIÁO VIÊN) ===
+@app.route("/download-details", methods=["GET", "POST"])
+def download_details():
+    if request.method == "GET":
+        return """
+        <html><body>
+        <h3>Download file chi tiết (giáo viên)</h3>
+        <form method="post">
+          Mật khẩu: <input name="pw" type="password"/>
+          <button type="submit">Tải về</button>
+        </form>
+        <p><a href="/">Quay về trang nộp bài</a></p>
+        </body></html>
+        """
+    pw = request.form.get("pw", "")
+    if pw != TEACHER_PASSWORD:
+        return "<h3>Mật khẩu sai.</h3><p><a href='/download-details'>Thử lại</a></p>", 401
+
+    if not os.path.exists(DETAILS_FILE):
+        return "<h3>Chưa có file chi tiết nào.</h3><p><a href='/'>Quay về</a></p>", 404
+
+    return send_file(DETAILS_FILE, as_attachment=True, download_name=os.path.basename(DETAILS_FILE))
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
