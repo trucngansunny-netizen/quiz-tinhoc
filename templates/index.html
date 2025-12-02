@@ -1,81 +1,141 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <title>Chấm bài Tin học</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-TIN — Chấm bài Tin học</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      margin: 0; padding: 0;
+      background: url("/static/bg_default.jpg") no-repeat center center / cover;
+      color: #1b2935;
+    }
+    .overlay { background: rgba(255,255,255,0.88); max-width: 980px; margin: 30px auto; border-radius: 12px; padding: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+    h1 { margin: 6px 0 12px 0; color:#0b66c3; font-size:24px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    label { font-weight:600; display:block; margin-bottom:6px; }
+    select, input[type=file], button { padding:10px; border-radius:8px; border:1px solid #cbd5e1; background:white; }
+    .btn { background:#0b76ef; color:white; border:none; cursor:pointer; }
+    .muted { color:#475569; font-size:14px; }
+    .result { background:#f8fafc; border-left:4px solid #0b76ef; padding:12px; margin-top:12px; border-radius:8px; }
+    .success { color: #0b8537; font-weight:700; }
+    .error { color: #c53030; font-weight:700; }
+    .footer { text-align:right; margin-top:12px; color:#64748b; font-size:13px; }
+    .visitbox { position: fixed; right: 12px; bottom: 12px; background: rgba(255,255,255,0.9); padding:8px 10px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.08); font-size:13px; color:#334155; }
+    .logo { height:54px; float:left; margin-right:12px; }
+  </style>
 </head>
 <body>
+  <div class="overlay">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <img src="/static/logo_tranquoctoan.png" alt="logo" class="logo" onerror="this.style.display='none'">
+      <div>
+        <h1>🧠 AI-TIN — Hệ thống chấm bài Tin học</h1>
+        <div class="muted">Chọn Khối → Chọn Lớp → Chọn Môn → Nộp tệp để chấm</div>
+      </div>
+    </div>
 
-<h2>Chấm bài tự động</h2>
+    <hr style="margin:12px 0; border:none; border-top:1px solid #e6eef8;">
 
-<form action="/grade" method="POST" enctype="multipart/form-data">
+    {% if message %}
+      <div class="result error">{{ message }}</div>
+    {% endif %}
 
-    <label>Chọn lớp:</label>
-    <select name="lop" required>
-        <option value="3A1">3A1</option>
-        <option value="3A2">3A2</option>
-        <option value="3A3">3A3</option>
-        <option value="3A4">3A4</option>
+    <form method="post" enctype="multipart/form-data">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <div style="min-width:160px;">
+          <label>Chọn khối</label>
+          <select name="grade" id="grade" onchange="onGradeChange()">
+            <option value="">-- Chọn khối --</option>
+            <option value="3">Khối 3</option>
+            <option value="4">Khối 4</option>
+            <option value="5">Khối 5</option>
+          </select>
+        </div>
 
-        <option value="4A1">4A1</option>
-        <option value="4A2">4A2</option>
-        <option value="4A3">4A3</option>
-        <option value="4A4">4A4</option>
-        <option value="4A5">4A5</option>
+        <div style="min-width:160px;">
+          <label>Chọn lớp</label>
+          <select name="class" id="class">
+            <option value="">-- Chọn lớp --</option>
+            {% for cls in classes %}
+              <option value="{{ cls }}">{{ cls }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-        <option value="5A1">5A1</option>
-        <option value="5A2">5A2</option>
-        <option value="5A3">5A3</option>
-        <option value="5A4">5A4</option>
-        <option value="5A5">5A5</option>
-    </select>
+        <div style="min-width:200px;">
+          <label>Chọn môn</label>
+          <select name="subject" id="subject">
+            <option value="">-- Chọn môn --</option>
+            <option value="Word">Word</option>
+            <option value="PowerPoint">PowerPoint</option>
+            <option value="Scratch">Scratch</option>
+          </select>
+        </div>
 
-    <br><br>
+        <div style="flex:1; min-width:260px;">
+          <label>Chọn tệp (docx / pptx / sb3)</label>
+          <input type="file" name="file" accept=".docx,.pptx,.sb3,.zip" required>
+        </div>
 
-    <label>Chọn môn:</label>
-    <select name="subject" required>
-        <option value="word">Word</option>
-        <option value="ppt">PowerPoint</option>
-        <option value="scratch">Scratch</option>
-    </select>
+        <div style="align-self:flex-end;">
+          <button type="submit" class="btn">📤 Nộp & Chấm</button>
+        </div>
+      </div>
+    </form>
 
-    <br><br>
+    {% if result %}
+      <div class="result" style="margin-top:14px;">
+        <div><span class="success">✅ Bài đã chấm xong!</span></div>
+        <div style="margin-top:8px;"><strong>Họ tên:</strong> {{ result.student }} &nbsp;&nbsp; <strong>Lớp:</strong> {{ result.class }} &nbsp;&nbsp; <strong>Môn:</strong> {{ result.subject }}</div>
+        <div style="margin-top:6px;"><strong>Điểm:</strong> {{ result.total }}</div>
 
-    <label>Khối lớp:</label>
-    <select name="grade" required>
-        <option value="3">Khối 3</option>
-        <option value="4">Khối 4</option>
-        <option value="5">Khối 5</option>
-    </select>
+        <hr style="margin:8px 0; border:none; border-top:1px solid #e6eef8;">
+        <div style="font-size:14px;"><strong>Chi tiết tiêu chí:</strong></div>
+        <ul>
+          {% for line in result.details %}
+            <li>{{ line }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
 
-    <br><br>
+    <div class="footer">© AI-TIN • Thống kê lượt truy cập: {{ visit_count }}</div>
+  </div>
 
-    <label>Chọn file bài làm:</label>
-    <input type="file" name="file" required>
+  <div class="visitbox">Lượt truy cập: {{ visit_count }}</div>
 
-    <br><br>
-
-    <button type="submit">Chấm bài</button>
-</form>
-
-{% if score is not none %}
-<hr>
-<h3>Kết quả:</h3>
-<p><b>Điểm:</b> {{ score }}</p>
-{% endif %}
-
-{% if errors %}
-<h4>Lỗi:</h4>
-<ul>
-{% for e in errors %}
-<li>{{ e }}</li>
-{% endfor %}
-</ul>
-{% endif %}
-
-{% if count %}
-<p><b>Tổng lượt chấm bài:</b> {{ count }}</p>
-{% endif %}
-
+  <script>
+    const avail = {{ avail_by_grade | tojson | safe }};
+    function onGradeChange(){
+      const g = document.getElementById('grade').value;
+      const subj = document.getElementById('subject');
+      // reset
+      for (let i=0; i<subj.options.length; i++){
+        subj.options[i].style.display = 'block';
+        subj.options[i].disabled = false;
+      }
+      if (!g) return;
+      const allowed = avail[g] || [];
+      for (let i=0; i<subj.options.length; i++){
+        const val = subj.options[i].value;
+        if (val && !allowed.includes(val)){
+          subj.options[i].style.display = 'none';
+          subj.options[i].disabled = true;
+        }
+      }
+      for (let i=0; i<subj.options.length; i++){
+        if (!subj.options[i].disabled && subj.options[i].value){
+          subj.selectedIndex = i; break;
+        }
+      }
+      let bg = "/static/bg_default.jpg";
+      if (g === "3") bg = "/static/bg_3.jpg";
+      if (g === "4") bg = "/static/bg_4.jpg";
+      if (g === "5") bg = "/static/bg_5.jpg";
+      document.body.style.background = "url('"+bg+"') no-repeat center center / cover";
+    }
+  </script>
 </body>
 </html>
