@@ -42,6 +42,7 @@ AVAILABLE_BY_GRADE = {
     5: ["Word", "Scratch"]
 }
 
+# Tạo thư mục cần thiết (nếu chưa có)
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(CRITERIA_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -51,18 +52,32 @@ app.secret_key = os.environ.get("FLASK_SECRET", "change_this_secret_in_prod")
 
 # === LƯỢT TRUY CẬP ===
 def read_visit():
+    """
+    Đọc file visits.txt, trả về số nguyên. Nếu file không tồn tại -> 0.
+    Lưu ý: file lưu ở RESULTS_DIR để không bị ghi đè khi deploy lại nếu folder RESULTS persist.
+    """
     try:
         if not os.path.exists(VISIT_FILE):
             return 0
-        return int(open(VISIT_FILE, "r", encoding="utf-8").read().strip() or "0")
+        with open(VISIT_FILE, "r", encoding="utf-8") as f:
+            v = f.read().strip()
+            return int(v or "0")
     except Exception:
         return 0
 
 def increase_visit():
-    c = read_visit() + 1
-    with open(VISIT_FILE, "w", encoding="utf-8") as f:
-        f.write(str(c))
-    return c
+    """
+    Tăng lượt truy cập +1 (an toàn, overwrite chỉ giá trị mới).
+    Không reset gì khác — không tạo lại file ở startup.
+    """
+    try:
+        current = read_visit()
+        current += 1
+        with open(VISIT_FILE, "w", encoding="utf-8") as f:
+            f.write(str(current))
+        return current
+    except Exception:
+        return read_visit()
 
 # === CHỨC NĂNG LƯU DETAILS (mỗi lần 1 dòng trong sheet ChiTiet) ===
 def ensure_details():
@@ -91,29 +106,39 @@ def save_detail_excel(student_name, class_name, grade, subject, filename, total,
 
 # === TẠO FILE TONGHOP TỪ DETAILS (khi giáo viên yêu cầu tải) ===
 def build_tonghop_from_details():
-    # if no details -> empty file
+    """
+    Tạo file tonghop.xlsx với 1 sheet / 1 lớp từ DETAILS_FILE.
+    Nếu không có row, sheet vẫn được tạo theo danh sách CLASSES.
+    """
     ensure_details()
     wb_details = load_workbook(DETAILS_FILE)
+    if "ChiTiet" not in wb_details.sheetnames:
+        return None
     ws = wb_details["ChiTiet"]
-    # create new tonghop workbook
+
     wb = Workbook()
-    # remove default
+    # remove default sheet if present
     if "Sheet" in wb.sheetnames:
         wb.remove(wb["Sheet"])
-    # create sheets for all classes
+
+    # create sheets for all classes (keeps same header)
     for cls in CLASSES:
         sh = wb.create_sheet(title=cls)
         sh.append(["Thời gian", "Họ tên", "Lớp", "Khối", "Môn", "Tên tệp", "Tổng điểm", "Chi tiết(JSON)"])
-    # iterate details rows
+
+    # iterate details rows and append to corresponding class sheet
     for row in list(ws.iter_rows(min_row=2, values_only=True)):
-        if not row: continue
+        if not row:
+            continue
         time, name, class_name, grade, subject, filename, total, notes_json = row
+        # sanitize class_name if None
+        class_name = class_name or "Unknown"
         if class_name not in wb.sheetnames:
             ws_sheet = wb.create_sheet(title=class_name)
             ws_sheet.append(["Thời gian", "Họ tên", "Lớp", "Khối", "Môn", "Tên tệp", "Tổng điểm", "Chi tiết(JSON)"])
         ws_sheet = wb[class_name]
         ws_sheet.append([time, name, class_name, grade, subject, filename, total, notes_json])
-    # save
+
     wb.save(TONGHOP_FILE)
     return TONGHOP_FILE
 
@@ -128,7 +153,7 @@ def custom_static(filename):
 # === TRANG CHÍNH (Nộp & Chấm) ===
 @app.route("/", methods=["GET", "POST"])
 def index():
-    # tăng lượt truy cập chỉ khi GET
+    # tăng lượt truy cập chỉ khi GET (mở trang)
     if request.method == "GET":
         increase_visit()
 
@@ -159,9 +184,26 @@ def index():
                 if not allowed_file(filename):
                     message = "Chỉ hỗ trợ .docx, .pptx, .sb3, .zip"
                 else:
+                    # save into a tmp dir for processing
                     tmp_dir = tempfile.mkdtemp(prefix="ai_tin_")
                     tmp_path = os.path.join(tmp_dir, filename)
                     uploaded.save(tmp_path)
+
+                    # === THÊM MỚI: lưu bản copy thực tế của tệp vào thư mục results/<class>/<subject>/ ===
+                    try:
+                        dest_dir = os.path.join(RESULTS_DIR, selected_class, selected_subject)
+                        os.makedirs(dest_dir, exist_ok=True)
+                        # keep original filename; if exists, add timestamp suffix to avoid overwrite
+                        dest_path = os.path.join(dest_dir, filename)
+                        if os.path.exists(dest_path):
+                            name, ext = os.path.splitext(filename)
+                            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                            dest_path = os.path.join(dest_dir, f"{name}_{stamp}{ext}")
+                        shutil.copy(tmp_path, dest_path)
+                    except Exception as e:
+                        # không fatal — vẫn tiếp tục chấm nhưng lưu log vào message nếu cần
+                        # nhưng không block chấm
+                        print("Warning: không lưu được bản copy tệp học sinh:", e)
 
                     # load criteria
                     criteria = load_criteria(selected_subject.lower(), int(selected_grade), CRITERIA_DIR)
@@ -245,6 +287,9 @@ def download_tonghop():
         return "<h3>Chưa có dữ liệu nộp bài nào.</h3><p><a href='/'>Quay về</a></p>", 404
 
     path = build_tonghop_from_details()
+    if not path or not os.path.exists(path):
+        return "<h3>Không thể tạo file tổng hợp.</h3><p><a href='/'>Quay về</a></p>", 500
+
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))
 
 # === ROUTE TẢI FILE CHI TIẾT (GIÁO VIÊN) ===
@@ -271,4 +316,5 @@ def download_details():
     return send_file(DETAILS_FILE, as_attachment=True, download_name=os.path.basename(DETAILS_FILE))
 
 if __name__ == "__main__":
+    # app.run debug False for production; gunicorn will run it under Procfile
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
