@@ -1,5 +1,11 @@
 # cham_tieuchi.py
-import os, json, zipfile, tempfile, shutil, re, unicodedata
+import os
+import json
+import zipfile
+import tempfile
+import shutil
+import re
+import unicodedata
 from docx import Document
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -254,11 +260,12 @@ def grade_scratch(file_path, criteria):
             ok = True
         else:
             # fallback: try to match description keywords to flags
-            if "vòng lặp" in desc.lower() or "loop" in desc.lower():
+            lower_desc = desc.lower()
+            if "vòng lặp" in lower_desc or "loop" in lower_desc:
                 ok = flags.get("has_loop", False)
-            elif "điều kiện" in desc.lower() or "logic" in desc.lower():
+            elif "điều kiện" in lower_desc or "logic" in lower_desc:
                 ok = flags.get("has_condition", False)
-            elif "broadcast" in desc.lower() or "sự kiện" in desc.lower() or "event" in desc.lower():
+            elif "broadcast" in lower_desc or "sự kiện" in lower_desc or "event" in lower_desc:
                 ok = flags.get("has_interaction", False)
         if ok:
             total_awarded += diem
